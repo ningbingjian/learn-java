@@ -1,0 +1,22 @@
+# === Java / Maven ===
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+dependency-reduced-pom.xml
+
+# === IDE ===
+.idea/
+*.iml
+.vscode/
+*.ipr
+*.iws
+
+# === 系统 ===
+.DS_Store
+Thumbs.db
+
+# === 构建日志 / 产物 ===
+*.log
+build/
+out/
