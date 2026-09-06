@@ -408,4 +408,4 @@ mvn -q -pl 007-component-scanning compile exec:java -Dexec.args=scan
 - 将 `ExcludeUtilityConfig` 的排除类型改为 `InMemoryOrderRepository`，预测错误阶段和缺失类型，再运行验证。
 - 在 `IncludeOnlyConfig` 中恢复默认过滤器，检查候选列表增加了哪些类，并解释原因。
 
-下一课：[08-01-008 XML 配置与定义继承](../00-模块学习大纲.md#lesson-008)。我们会继续比较不同注册入口怎样表达同一个定义模型，并区分定义继承、Java 类继承和父子容器。
+下一课：[08-01-008 XML 配置与定义继承](../008-xml-definition-inheritance/README.md)。我们会继续比较不同注册入口怎样表达同一个定义模型，并区分定义继承、Java 类继承和父子容器。

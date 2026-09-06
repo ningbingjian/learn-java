@@ -15,8 +15,9 @@
 | 08-01-005 把第一个应用变成可维护的测试 | [进入第005课](005-maintainable-container-tests/README.md) | 已提供分层测试讲解、三个运行场景与十三个测试 |
 | 08-01-006 BeanDefinition 的基本模型 | [进入第006课](006-bean-definition-model/README.md) | 已提供元数据模型讲解、六个运行场景与九个测试 |
 | 08-01-007 组件扫描与注解注册 | [进入第007课](007-component-scanning/README.md) | 已提供扫描边界与注册机制讲解、八个运行场景、十个测试与源码断点指引 |
+| 08-01-008 XML 配置与定义继承 | [进入第008课](008-xml-definition-inheritance/README.md) | 已提供 XML 与定义合并讲解、十个运行场景、十二个测试与源码断点指引 |
 
-下一课：[08-01-008 XML 配置与定义继承](00-模块学习大纲.md#lesson-008)（大纲已列出，正文待编写）。
+下一课：[08-01-009 编程式注册与外部对象接入](00-模块学习大纲.md#lesson-009)（大纲已列出，正文待编写）。
 
 **运行方式**
 
@@ -31,6 +32,7 @@ mvn -q -pl 004-java-config-object-assembly exec:java -Dexec.args=email
 mvn -q -pl 005-maintainable-container-tests exec:java -Dexec.args=console
 mvn -q -pl 006-bean-definition-model exec:java -Dexec.args=metadata
 mvn -q -pl 007-component-scanning exec:java -Dexec.args=scan
+mvn -q -pl 008-xml-definition-inheritance exec:java -Dexec.args=xml
 ```
 
 按需选择单课构建和测试：
@@ -43,6 +45,7 @@ mvn -pl 004-java-config-object-assembly -am test
 mvn -pl 005-maintainable-container-tests -am test
 mvn -pl 006-bean-definition-model -am test
 mvn -pl 007-component-scanning -am test
+mvn -pl 008-xml-definition-inheritance -am test
 ```
 
-每课的文档、子模块 POM 与 src 放在同一目录；本目录的父 POM 统一管理依赖和构建插件。第001—002课使用普通 Java，只有测试依赖 JUnit；第003课引入 Spring Framework 7.0.9，通过 Maven 运行并附加同版本源码；第004课继续学习 Java 配置与对象装配；第005课拆分业务、装配、生命周期与异常测试；第006课进入 Bean 定义、元数据与创建时机；第007课学习组件扫描、命名、过滤与注册冲突；聚合构建共运行 63 个测试。
+每课的文档、子模块 POM 与 src 放在同一目录；本目录的父 POM 统一管理依赖和构建插件。第001—002课使用普通 Java，只有测试依赖 JUnit；第003课引入 Spring Framework 7.0.9，通过 Maven 运行并附加同版本源码；第004课继续学习 Java 配置与对象装配；第005课拆分业务、装配、生命周期与异常测试；第006课进入 Bean 定义、元数据与创建时机；第007课学习组件扫描、命名、过滤与注册冲突；第008课学习 XML 装配、定义继承、集合合并与配置迁移；聚合构建共运行 75 个测试。
