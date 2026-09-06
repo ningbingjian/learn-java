@@ -10,8 +10,9 @@
 | --- | --- | --- |
 | 08-01-001 为什么需要 Spring 容器 | [进入第001课](001-why-spring-container/README.md) | 已提供讲解、三个运行场景与六个测试 |
 | 08-01-002 IoC、DI 与对象装配 | [进入第002课](002-ioc-di-object-assembly/README.md) | 已提供讲解、七个运行场景与九个测试 |
+| 08-01-003 建立可运行、可调试的学习工程 | [进入第003课](003-runnable-debuggable-spring/README.md) | 已提供讲解、四个运行场景、八个测试与源码断点指引 |
 
-下一课：[08-01-003 建立可运行、可调试的学习工程](00-模块学习大纲.md#lesson-003)（大纲已列出，正文待编写）。
+下一课：[08-01-004 使用 Java 配置显式组装对象](00-模块学习大纲.md#lesson-004)（大纲已列出，正文待编写）。
 
 **运行方式**
 
@@ -21,6 +22,7 @@
 mvn clean verify
 java -cp 001-why-spring-container/target/classes cn.ningbingjian.learnjava.ioc.lesson001.DemoApplication manual
 java -cp 002-ioc-di-object-assembly/target/classes cn.ningbingjian.learnjava.ioc.lesson002.DemoApplication constructor-email
+mvn -q -pl 003-runnable-debuggable-spring exec:java -Dexec.args=lifecycle
 ```
 
 按需选择单课构建和测试：
@@ -28,6 +30,7 @@ java -cp 002-ioc-di-object-assembly/target/classes cn.ningbingjian.learnjava.ioc
 ```bash
 mvn -pl 001-why-spring-container -am test
 mvn -pl 002-ioc-di-object-assembly -am test
+mvn -pl 003-runnable-debuggable-spring -am test
 ```
 
-每课的文档、子模块 POM 与 src 放在同一目录；本目录的父 POM 统一管理依赖和构建插件。第001—002课使用普通 Java，只有测试依赖 JUnit；聚合构建共运行 15 个测试；Spring 容器依赖在第003课引入。
+每课的文档、子模块 POM 与 src 放在同一目录；本目录的父 POM 统一管理依赖和构建插件。第001—002课使用普通 Java，只有测试依赖 JUnit；第003课引入 Spring Framework 7.0.9，通过 Maven 运行并附加同版本源码；聚合构建共运行 23 个测试。
