@@ -11,6 +11,9 @@
     </parent>
     <artifactId>lesson-005-maintainable-container-tests</artifactId>
     <name>08-01-005 Maintainable Container Tests</name>
+    <properties>
+        <exec.mainClass>cn.ningbingjian.learnjava.ioc.lesson005.DemoApplication</exec.mainClass>
+    </properties>
     <dependencies>
         <dependency>
             <groupId>org.springframework</groupId>
@@ -28,7 +31,7 @@
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <configuration>
-                    <mainClass>cn.ningbingjian.learnjava.ioc.lesson005.DemoApplication</mainClass>
+                    <mainClass>${exec.mainClass}</mainClass>
                 </configuration>
             </plugin>
         </plugins>
