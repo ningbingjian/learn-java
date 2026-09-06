@@ -394,4 +394,4 @@ org/springframework/spring-context/7.0.9/spring-context-7.0.9-sources.jar
 
 本课建立了可以重复构建、运行、测试和进入依赖源码的工程，也把前两课的手动装配关系接到了实际 Spring 容器上。
 
-下一课：[08-01-004 使用 Java 配置显式组装对象](../00-模块学习大纲.md#lesson-004)。接下来会专门展开配置类、`@Bean` 与显式装配，把本课为了跑通入口而使用的配置写法讲完整。
+下一课：[08-01-004 使用 Java 配置显式组装对象](../004-java-config-object-assembly/README.md)。接下来会专门展开配置类、`@Bean` 与显式装配，把本课为了跑通入口而使用的配置写法讲完整。
