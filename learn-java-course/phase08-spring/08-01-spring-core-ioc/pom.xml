@@ -16,6 +16,7 @@
         <module>004-java-config-object-assembly</module>
         <module>005-maintainable-container-tests</module>
         <module>006-bean-definition-model</module>
+        <module>007-component-scanning</module>
     </modules>
 
     <properties>
