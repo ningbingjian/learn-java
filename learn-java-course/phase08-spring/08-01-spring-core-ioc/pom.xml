@@ -17,6 +17,7 @@
         <module>005-maintainable-container-tests</module>
         <module>006-bean-definition-model</module>
         <module>007-component-scanning</module>
+        <module>008-xml-definition-inheritance</module>
     </modules>
 
     <properties>

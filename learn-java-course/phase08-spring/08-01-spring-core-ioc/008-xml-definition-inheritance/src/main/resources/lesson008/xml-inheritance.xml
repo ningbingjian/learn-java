@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd">
+    <bean id="deliveryLog" class="cn.ningbingjian.learnjava.ioc.lesson008.DeliveryLog"/>
+    <bean id="notifierTemplate" class="cn.ningbingjian.learnjava.ioc.lesson008.RouteNotifier" abstract="true"
+          lazy-init="true" init-method="initialize" destroy-method="shutdown">
+        <constructor-arg index="0" value="template"/>
+        <constructor-arg index="1" ref="deliveryLog"/>
+        <property name="prefix" value="[orders]"/>
+        <property name="recipients">
+            <list><value>ops@example.test</value></list>
+        </property>
+        <property name="headers">
+            <map>
+                <entry key="region" value="cn"/>
+                <entry key="source" value="course"/>
+            </map>
+        </property>
+    </bean>
+    <bean id="emailNotifier" parent="notifierTemplate">
+        <constructor-arg index="0" value="email"/>
+        <property name="prefix" value="[priority]"/>
+        <property name="recipients">
+            <list merge="true"><value>owner@example.test</value></list>
+        </property>
+        <property name="headers">
+            <map merge="true">
+                <entry key="region" value="us"/>
+                <entry key="priority" value="high"/>
+            </map>
+        </property>
+    </bean>
+    <bean id="smsNotifier" parent="notifierTemplate">
+        <constructor-arg index="0" value="sms"/>
+        <property name="recipients">
+            <list><value>on-call</value></list>
+        </property>
+    </bean>
+</beans>
