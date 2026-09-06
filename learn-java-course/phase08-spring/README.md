@@ -22,7 +22,7 @@
 
 **学习规划建议**
 
-08-01 Spring Core / IoC 的完整模块大纲已建立，[第001课](08-01-spring-core-ioc/001-why-spring-container/README.md)、[第002课](08-01-spring-core-ioc/002-ioc-di-object-assembly/README.md)、[第003课](08-01-spring-core-ioc/003-runnable-debuggable-spring/README.md)与[第004课](08-01-spring-core-ioc/004-java-config-object-assembly/README.md)已提供正文与配套源码，后续继续按大纲逐课展开。每个模块保留入门、进阶、原理、源码与工程实践的完整路径；课程数量由内容和依赖决定。
+08-01 Spring Core / IoC 的完整模块大纲已建立，[第001课](08-01-spring-core-ioc/001-why-spring-container/README.md)、[第002课](08-01-spring-core-ioc/002-ioc-di-object-assembly/README.md)、[第003课](08-01-spring-core-ioc/003-runnable-debuggable-spring/README.md)、[第004课](08-01-spring-core-ioc/004-java-config-object-assembly/README.md)与[第005课](08-01-spring-core-ioc/005-maintainable-container-tests/README.md)已提供正文与配套源码，后续继续按大纲逐课展开。每个模块保留入门、进阶、原理、源码与工程实践的完整路径；课程数量由内容和依赖决定。
 
 第一轮学习 Core / IoC 的对象管理与依赖注入，建立可运行、可调试的应用基础。再进入 AOP、事务与 MVC 的基础应用，并使用 Boot 组织业务项目。
 
@@ -44,5 +44,6 @@ IoC 容器和依赖注入的概念依据见 [Spring 官方介绍](https://docs.s
 - [08-01-002 IoC、DI 与对象装配](08-01-spring-core-ioc/002-ioc-di-object-assembly/README.md)：概念对照、七个运行场景与九个测试。
 - [08-01-003 建立可运行、可调试的学习工程](08-01-spring-core-ioc/003-runnable-debuggable-spring/README.md)：Spring 容器工程、四个运行场景、八个测试与源码断点指引。
 - [08-01-004 使用 Java 配置显式组装对象](08-01-spring-core-ioc/004-java-config-object-assembly/README.md)：显式配置、渠道替换、名称与实例对照、四个运行场景及八个测试。
+- [08-01-005 把第一个应用变成可维护的测试](08-01-spring-core-ioc/005-maintainable-container-tests/README.md)：业务与装配分层、测试替身、隔离与资源释放、异常链诊断，三个运行场景及十三个测试。
 
-[进入 IoC 模块学习目录](08-01-spring-core-ioc/README.md)。下一个待编写课程：[08-01-005 把第一个应用变成可维护的测试](08-01-spring-core-ioc/00-模块学习大纲.md#lesson-005)。其他模块大纲后续展开。
+[进入 IoC 模块学习目录](08-01-spring-core-ioc/README.md)。下一个待编写课程：[08-01-006 BeanDefinition 的基本模型](08-01-spring-core-ioc/00-模块学习大纲.md#lesson-006)。其他模块大纲后续展开。
