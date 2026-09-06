@@ -11,6 +11,9 @@
     </parent>
     <artifactId>lesson-007-component-scanning</artifactId>
     <name>08-01-007 Component Scanning</name>
+    <properties>
+        <exec.mainClass>cn.ningbingjian.learnjava.ioc.lesson007.DemoApplication</exec.mainClass>
+    </properties>
     <dependencies>
         <dependency>
             <groupId>org.springframework</groupId>
@@ -28,7 +31,7 @@
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <configuration>
-                    <mainClass>cn.ningbingjian.learnjava.ioc.lesson007.DemoApplication</mainClass>
+                    <mainClass>${exec.mainClass}</mainClass>
                 </configuration>
             </plugin>
         </plugins>

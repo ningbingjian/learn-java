@@ -1,521 +1,1114 @@
-# 08-01-008 XML 配置与定义继承
+# 08-01-008 XML 配置与定义继承：从第一份配置逐步提取模板
 
-[返回模块目录](../README.md) · [本课在大纲中的位置](../00-模块学习大纲.md#lesson-008) · [上一课：组件扫描与注解注册](../007-component-scanning/README.md)
+[返回模块目录](../README.md) · [本课大纲](../00-模块学习大纲.md#lesson-008) · [上一课](../007-component-scanning/README.md)
 
-第006课直接构造 BeanDefinition，第007课通过组件扫描注册定义。这一课使用 XML 描述对象装配，再观察父定义中的公共配置怎样与子定义合并。
+第007课用扫描发现对象。这一课换成 XML，但仍然先从一个通知器开始：亲手写第一份配置，再依次加入参数、对象引用、集合和生命周期。等第二个通知器真正产生重复配置后，我们才提取父定义。
 
-学习 XML 的价值，一是能够维护已有系统，二是把“配置从哪里来”和“容器如何使用配置”连接起来。看见 `parent="notifierTemplate"` 时，你应知道这是定义模板关系；看见 `factory-bean` 时，你应知道要找的是哪个工厂对象，而不是直接按 `class` 实例化产品。
+跟写文件使用独立的 `cn.ningbingjian.learnjava.ioc.lesson008.practice` 包，仍放在本课 Maven 子模块。**先按第1步创建文件，后面逐步替换；不要一开始把完整示例的所有类复制过来。** 仓库原有 `lesson008` 业务类和 XML 保留作完成后的对照，跟写使用单独的 `practice008/beans.xml`，两组资源不混合加载。
 
-本课沿用 JDK 21、Spring Framework 7.0.9、JUnit 5.13.4 和 Maven 聚合工程。所有例子都在独立的 `lesson008` 包中，无需数据库、网络通知服务或历史课程的 JAR。
+本页文件路径相对于 `008-xml-definition-inheritance`；所有 Maven 命令在父目录 `08-01-spring-core-ioc` 执行，使用 JDK 21、Maven 3.9.x。`exec.mainClass` 选择正在跟写的入口，不传该参数仍运行原有完整演示。
 
-## 1. 先把要装配的对象关系说清楚
+先完成第1—9步的 XML 装配与模板主线，再继续工厂方法、Java 配置迁移和容器层级。每一步的完整文件内容便于核对当前位置；只在指示的文件上修改，其他文件保留上一步状态。深入边界与完整对照见 [机制参考](02-机制与边界参考.md)。
 
-当前业务是记录一次订单受理通知。`OrderService` 接收一个 `RouteNotifier`；通知器通过构造器接收渠道名与 `DeliveryLog`，通过 setter 接收前缀、收件人列表和附加字段。
+## 1. 先让 XML 管理一个没有依赖的对象
 
-| 源码 | 职责 | 与本课的关系 |
-| --- | --- | --- |
-| [OrderService.java](src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/OrderService.java) | 把订单编号交给通知器 | 验证 `ref` 是否连接到容器中的那个对象 |
-| [RouteNotifier.java](src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/RouteNotifier.java) | 保存渠道配置，初始化后记录通知 | 同时观察构造器、属性、集合与生命周期配置 |
-| [DeliveryLog.java](src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/DeliveryLog.java) | 保存通知记录和生命周期事件 | 每个上下文拥有自己的观察记录 |
-| [NotifierFactory.java](src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/NotifierFactory.java) | 使用实例方法创建通知器 | 对照静态工厂与实例工厂 |
-| [XmlContexts.java](src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/XmlContexts.java) | 读入 XML，保留尚未刷新的上下文 | 分开观察定义加载和对象创建 |
-| [DemoApplication.java](src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/DemoApplication.java) | 提供十个运行模式 | 输出每个场景真正需要观察的状态 |
+第一件事只是“给一个订单输出通知”。创建 `Notifier.java`，现在不需要渠道配置、日志依赖或 Spring 注解。
 
-这里的“通知”只是向内存列表写入字符串。`email`、`sms` 是演示渠道名，`ops@example.test` 是样例收件人；不会发送真实邮件或短信。记录器用于单线程学习场景，不承担并发日志系统的职责。
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/Notifier.java`。以下是本步该文件的完整内容。
 
-通知器有两个时间上的要求：调用 `initialize()` 时必须已有收件人；调用 `send()` 时必须已经初始化。`shutdown()` 则把它置为不可用并记录关闭事件。这让我们可以观察容器是否按有效配置完成了对象准备，而不只是断言“能拿到一个对象”。
+```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
 
-## 2. 第一份 XML：构造器、对象引用与属性
+public class Notifier {
+    public void send(String orderId) {
+        System.out.println("email order=" + orderId);
+    }
+}
+```
 
-完整配置见 [xml-basics.xml](src/main/resources/lesson008/xml-basics.xml)。它位于 Maven 的 `src/main/resources` 下，构建后会进入类路径。
+接着创建第一份 XML。`id` 给对象定义一个容器内名称，`class` 告诉容器目标 Java 类型。先只写这一个 Bean，暂时不引入构造参数、集合或模板。
+
+文件：`src/main/resources/practice008/beans.xml`。以下是本步该文件的完整内容。
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <beans xmlns="http://www.springframework.org/schema/beans"
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
        xsi:schemaLocation="http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd">
-    <bean id="deliveryLog" class="cn.ningbingjian.learnjava.ioc.lesson008.DeliveryLog"/>
-    <bean id="notifier" class="cn.ningbingjian.learnjava.ioc.lesson008.RouteNotifier"
-          init-method="initialize" destroy-method="shutdown">
-        <constructor-arg index="0" value="email"/>
-        <constructor-arg index="1" ref="deliveryLog"/>
-        <property name="prefix" value="[orders]"/>
-        <property name="recipients">
-            <list><value>ops@example.test</value></list>
-        </property>
-        <property name="headers">
-            <map><entry key="region" value="cn"/></map>
-        </property>
-    </bean>
-    <bean id="orderService" class="cn.ningbingjian.learnjava.ioc.lesson008.OrderService">
-        <constructor-arg ref="notifier"/>
+    <bean id="notifier" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.Notifier">
     </bean>
 </beans>
 ```
 
-先沿着服务的依赖往下读：`orderService` 的构造器参数引用 `notifier`，通知器的第1个构造器参数引用 `deliveryLog`。构造器索引从0开始，所以第0个参数是字符串渠道名，第1个参数才是日志对象。
+最后创建入口：先用 XML 读取器登记定义，再刷新上下文，随后按名字取对象并调用。try-with-resources 在退出时关闭上下文。
 
-`value="deliveryLog"` 和 `ref="deliveryLog"` 不是两种写法的同义词。前者提供待转换的字面值，后者保存一个命名对象引用，在创建目标 Bean 时再解析到实例。本例的构造器需要 `DeliveryLog` 对象，不能用名字字符串代替。
-
-`<property name="prefix">` 对应 JavaBean 写入属性，即本例的 `setPrefix(...)`。它并不是任意私有字段的直接赋值指令。拼错属性名或让目标类缺少相应可写属性，会在属性填充时失败，后面有隔离样例。
-
-`list` 的内容传给 `setRecipients(List<String>)`，`map` 的键值传给 `setHeaders(Map<String, String>)`。当前都是字符串；遇到数字、枚举或对象引用时，还应核对目标类型和转换规则。XML 标签本身不能替代 Java 类型约束。
-
-文件头中的命名空间用于识别元素，`schemaLocation` 为命名空间关联 XSD。这个标准 Spring beans schema 在本工程中可以通过 Spring JAR 的映射解析，已用离线 Maven 运行验证；不要由此推断任意自定义 schema 都不需要外部资源。
-
-## 3. 把“加载定义”和“刷新上下文”分开
-
-入口工具的核心代码如下：
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/Main.java`。以下是本步该文件的完整内容。
 
 ```java
-public static GenericApplicationContext load(String resource) {
-    var context = new GenericApplicationContext();
-    new XmlBeanDefinitionReader(context).loadBeanDefinitions("classpath:lesson008/" + resource);
-    return context;
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+import org.springframework.beans.factory.xml.XmlBeanDefinitionReader;
+import org.springframework.context.support.GenericApplicationContext;
+
+public class Main {
+    public static void main(String[] args) {
+        try (var context = new GenericApplicationContext()) {
+            new XmlBeanDefinitionReader(context).loadBeanDefinitions("classpath:practice008/beans.xml");
+            context.refresh();
+            context.getBean("notifier", Notifier.class).send("O-008");
+        }
+    }
 }
 ```
 
-这个方法只负责把指定资源读入上下文的注册表，调用方随后决定何时 `refresh()`。因此它适合本课观察原始定义和合并定义。
-
-以下命令均在 `08-01-spring-core-ioc` 目录执行：
+在 `08-01-spring-core-ioc` 目录执行：
 
 ```bash
-mvn clean verify
-mvn -q -pl 008-xml-definition-inheritance exec:java -Dexec.args=xml
+mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.mainClass=cn.ningbingjian.learnjava.ioc.lesson008.practice.Main
 ```
 
 ```text
-lifecycle.before=[init:email]
-deliveries=[email [orders] order=O-008 -> [ops@example.test] headers={region=cn}]
-same-reference=true
-lifecycle.after=[init:email, close:email]
+email order=O-008
 ```
 
-`lifecycle.before` 在刷新完成后输出，说明通知器已经执行初始化。服务调用后，`deliveries` 展示渠道、前缀、订单号、列表和 Map 的实际内容。
+这一步没有组件扫描。通知器能进入容器，是因为 XML 明确声明了它；`XmlBeanDefinitionReader` 解释配置，`refresh()` 完成当前上下文的启动。
 
-`same-reference=true` 表示服务持有的对象就是容器中名为 `notifier` 的对象。退出 try-with-resources 时，上下文关闭，`shutdown()` 被调用，所以最后多出 `close:email`。
+文件应放在 `src/main/resources` 下。命令带有 `compile`，会把最新资源复制到 `target/classes`；若改了 XML 却只执行旧的运行命令，应先确认新资源是否进入类路径。标准 beans XSD 在当前 Spring 依赖中有解析映射，当前示例不需要为了读取它访问远程服务器。
 
-本例对象的顺序可以理解为：构造通知器、填充配置属性、执行初始化，然后供业务调用；上下文关闭时销毁其管理的单例。定义加载阶段没有执行这套业务对象生命周期。
+## 2. 希望切换渠道，于是增加构造参数
 
-如果直接使用 `new ClassPathXmlApplicationContext("lesson008/xml-basics.xml")`，常用的这个构造器会完成加载和刷新。不要拿它构造完成后的状态，与这里 `XmlContexts.load(...)` 返回时的状态直接比较：两者完成的工作不同。本课特意分开这两个步骤。
+目前 `email` 写死在 `send` 内。现在把“选择渠道”移到配置中：先改 Java 类，让渠道成为构造器必须提供的数据。
 
-## 4. 从重复配置提取父定义模板
-
-假设邮件和短信通知器共用日志对象、默认前缀、部分附加字段及生命周期方法，只有渠道和收件人不同。可以复制两段 XML，也可以通过定义继承明确哪些配置共同维护。
-
-完整配置见 [xml-inheritance.xml](src/main/resources/lesson008/xml-inheritance.xml)，其中模板为：
-
-```xml
-<bean id="notifierTemplate" class="cn.ningbingjian.learnjava.ioc.lesson008.RouteNotifier" abstract="true"
-      lazy-init="true" init-method="initialize" destroy-method="shutdown">
-    <constructor-arg index="0" value="template"/>
-    <constructor-arg index="1" ref="deliveryLog"/>
-    <property name="prefix" value="[orders]"/>
-    <property name="recipients">
-        <list><value>ops@example.test</value></list>
-    </property>
-    <property name="headers">
-        <map>
-            <entry key="region" value="cn"/>
-            <entry key="source" value="course"/>
-        </map>
-    </property>
-</bean>
-```
-
-`abstract="true"` 表示这份定义用于模板，不能直接请求实例。它与 Java 的 `abstract class` 无关：本例 `RouteNotifier` 反而是 `final` 类。
-
-模板中的 `lazy-init="true"` 是特意保留的观察变量，后面会验证它是否传播到子定义。模板不被创建的决定性条件是定义的 `abstract` 标志；单独使用懒加载不能让一个普通定义变成不可实例化的模板。
-
-邮件子定义如下：
-
-```xml
-<bean id="emailNotifier" parent="notifierTemplate">
-    <constructor-arg index="0" value="email"/>
-    <property name="prefix" value="[priority]"/>
-    <property name="recipients">
-        <list merge="true"><value>owner@example.test</value></list>
-    </property>
-    <property name="headers">
-        <map merge="true">
-            <entry key="region" value="us"/>
-            <entry key="priority" value="high"/>
-        </map>
-    </property>
-</bean>
-```
-
-`parent` 指向父定义的 Bean 名。子定义没有写 `class`，有效类型会从父定义取得；第0个构造器参数改成 `email`，第1个日志引用沿用父定义。这里用相同的显式索引表达覆盖关系，避免把没有索引的构造器参数组合规则也混进当前例子。
-
-定义合并不需要先构造一个“父对象”。Spring 使用的是父定义的配置数据，之后为 `emailNotifier` 创建自己的对象。
-
-## 5. 先看元数据，暂时不创建通知器
-
-运行：
-
-```bash
-mvn -q -pl 008-xml-definition-inheritance exec:java -Dexec.args=definitions
-```
-
-```text
-raw.class=null
-raw.parent=notifierTemplate
-raw.recipients=1
-merged.class=cn.ningbingjian.learnjava.ioc.lesson008.RouteNotifier
-merged.recipients=2
-merged.abstract=false
-merged.lazy=false
-has-log-instance=false
-has-email-instance=false
-```
-
-这个模式只有 XML 加载与定义查询，没有调用 `refresh()` 或 `getBean()`。
-
-| 观察项 | 原始邮件子定义 | 合并后的有效定义 |
-| --- | --- | --- |
-| 类名 | 没有在子定义中填写，因此为 `null` | 从模板取得 `RouteNotifier` 的完整类名 |
-| 收件人数量 | 只有子定义自己的1项 | 列表启用合并后为2项 |
-| 构造器第0个参数 | 子定义的 `email` | 使用子定义的 `email` |
-| 构造器第1个参数 | 子定义没有重新填写 | 使用父定义中的 `deliveryLog` 引用 |
-| 初始化、销毁方法 | 子定义没有重新填写 | 沿用 `initialize`、`shutdown` |
-
-`getBeanDefinition` 用于查看注册表保存的定义；`getMergedBeanDefinition` 会在需要时解析模板关系，得到有效的合并结果。本例中查询合并结果并没有创建日志或邮件单例，两个 `has-...-instance` 都为 `false`。
-
-还要区分“合并完成”和“值已解析为运行对象”。此时集合里的值仍可能是 XML 元数据对象，例如 `TypedStringValue`；构造器中的对象引用是 `RuntimeBeanReference`。不要把元数据列表直接强转成业务 `List<String>`。配套测试通过相应元数据类型检查参数，之后再在刷新场景验证实际 Java 对象。
-
-原始子定义仍保留自己的那1项收件人。观察合并结果不等于把原始 XML 的父配置逐项写回子定义，更不等于已经完成实例装配。
-
-## 6. 列表合并、Map 覆盖与普通属性覆盖
-
-```bash
-mvn -q -pl 008-xml-definition-inheritance exec:java -Dexec.args=inheritance
-```
-
-```text
-email.channel=email
-email.prefix=[priority]
-email.recipients=[ops@example.test, owner@example.test]
-email.headers={priority=high, region=us, source=course}
-sms.prefix=[orders]
-sms.recipients=[on-call]
-same-java-class=true
-template-has-instance=false
-initializations=[init:email, init:sms]
-close-count=2
-```
-
-邮件的有效结果包含三种不同规则：
-
-1. 普通属性 `prefix` 被子定义的 `[priority]` 覆盖。
-2. 子列表启用 `merge="true"`，父列表的 `ops@example.test` 在前，子列表的 `owner@example.test` 接在后面。列表合并不负责按业务身份去重。
-3. 子 Map 启用合并，保留父 Map 中的 `source=course`，把同名键 `region` 改成 `us`，并增加 `priority=high`。
-
-输出 Map 时使用 `TreeMap` 排序，便于阅读与比较；这不意味着业务依赖 Spring 按字母排序注入 Map。
-
-短信子定义没有开启列表合并：
-
-```xml
-<bean id="smsNotifier" parent="notifierTemplate">
-    <constructor-arg index="0" value="sms"/>
-    <property name="recipients">
-        <list><value>on-call</value></list>
-    </property>
-</bean>
-```
-
-因此它的列表只有 `on-call`，不会保留父列表中的邮箱。它没有重新配置 `prefix` 和 `headers`，所以这两项沿用父定义。
-
-`merge="true"` 应写在需要合并的**子集合元素**上，而不是写在 `<bean>` 上，也不是只在父集合上设置后期待所有子集合自动合并。它描述的是父子定义中同一个集合属性的合并，不是两个任意 Bean 的内容合并。父子集合类型也必须兼容，不能把父 Map 与子 List 当作同一种集合拼接。
-
-本例验证列表和 Map，源码可分别对照 [ManagedList（v7.0.9）](https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-beans/src/main/java/org/springframework/beans/factory/support/ManagedList.java) 与 [ManagedMap（v7.0.9）](https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-beans/src/main/java/org/springframework/beans/factory/support/ManagedMap.java)。
-
-## 7. 定义继承不是把父定义所有开关原样复制
-
-`definitions` 模式中有两个值得停下来看的结果：`merged.abstract=false`、`merged.lazy=false`。
-
-父定义是抽象模板，子定义默认不是抽象定义，所以子 Bean 可以被创建。若抽象标志也机械继承下来，模板就无法自然产出可实例化的子定义了。
-
-懒加载要进一步结合当前 XML 解析过程看。本文件没有设置根元素的 `default-lazy-init`；子 `<bean>` 未写 `lazy-init` 时，解析器会按当前文档默认值形成 `false`。合并时这个子定义值覆盖父定义上的 `true`，因此两个子通知器都在刷新期间初始化。
-
-这个结果验证的是**当前 XML 配置及其解析后的定义**。编程方式构造的定义可能保留“未设置”的状态，不能把本例扩大为“所有注册入口的 lazy 标志都不可能继承”。先看解析结果，再看合并规则，是读这类源码时更可靠的顺序。
-
-类名、构造参数、属性值、作用域和生命周期等设置也各有合并条件。需要扩展例子时，逐项核对有效定义，不要写一个“全部继承”或“全部覆盖”的总规则。当前细节可对照 [BeanDefinitionParserDelegate](https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-beans/src/main/java/org/springframework/beans/factory/xml/BeanDefinitionParserDelegate.java) 的属性解析，以及 [AbstractBeanDefinition.overrideFrom](https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-beans/src/main/java/org/springframework/beans/factory/support/AbstractBeanDefinition.java) 的合并实现。
-
-## 8. 抽象模板存在于注册表，却不能直接使用
-
-```bash
-mvn -q -pl 008-xml-definition-inheritance exec:java -Dexec.args=abstract-template
-```
-
-```text
-template-definition-exists=true
-get-template-error=BeanIsAbstractException
-child-ready=true
-```
-
-注册表中有 `notifierTemplate` 的定义，不代表可以 `getBean("notifierTemplate")`。这里抛出的 `BeanIsAbstractException` 针对定义的抽象标志，Java 类型本身是具体类也无济于事。
-
-父定义可作为模板被合并；业务对象应引用实际子 Bean。如果把服务的 `ref` 改为这个抽象模板，服务创建也无法得到可用依赖。反过来，单纯把模板改成 `lazy-init="true"`、去掉 `abstract`，并不能禁止别人按名字请求它。
-
-定义继承的概念说明见 [Spring 官方文档](https://docs.spring.io/spring-framework/reference/core/beans/child-bean-definitions.html)。实际排查时，同时检查定义上的标志和 Java 类的修饰符，避免把两个层面的“抽象”混为一谈。
-
-## 9. 静态工厂和实例工厂怎样写
-
-完整配置见 [xml-factories.xml](src/main/resources/lesson008/xml-factories.xml)。静态工厂定义是：
-
-```xml
-<bean id="staticNotifier" class="cn.ningbingjian.learnjava.ioc.lesson008.RouteNotifier" factory-method="createStatic"
-      init-method="initialize" destroy-method="shutdown">
-    <constructor-arg index="0" value="static"/>
-    <constructor-arg index="1" ref="deliveryLog"/>
-    <property name="recipients"><list><value>ops@example.test</value></list></property>
-</bean>
-```
-
-这里 `class` 表示持有静态工厂方法的类。它刚好也是返回对象的类型，但一般情况下工厂类可以与产品类型不同。配置了 `factory-method` 后，容器会调用该工厂方法，而不是把这些参数直接传给该类构造器。
-
-实例工厂则先有工厂 Bean，再由它的方法创建产品：
-
-```xml
-<bean id="notifierFactory" class="cn.ningbingjian.learnjava.ioc.lesson008.NotifierFactory"/>
-<bean id="instanceNotifier" factory-bean="notifierFactory" factory-method="create"
-      init-method="initialize" destroy-method="shutdown">
-    <constructor-arg index="0" value="instance"/>
-    <constructor-arg index="1" ref="deliveryLog"/>
-    <property name="recipients"><list><value>ops@example.test</value></list></property>
-</bean>
-```
-
-注意，实例产品定义没有 `class`。它通过 `factory-bean` 找到工厂对象，再调用 `create`；这里的 `<constructor-arg>` 实际用于工厂方法参数。标签名字沿用了构造参数表示法，不能仅凭名字判断执行的是 Java 构造器。
-
-```bash
-mvn -q -pl 008-xml-definition-inheritance exec:java -Dexec.args=factory
-```
-
-```text
-static.method=createStatic
-instance.factory=notifierFactory
-instance.definition-class=null
-product-type=RouteNotifier
-products-ready=true
-shared-log=true
-```
-
-`instance.definition-class=null` 不代表容器拿到了 `null` 产品。定义中的工厂信息足够描述创建入口，真实产品类型是 `RouteNotifier`。这也延续了第006课的结论：不能只看定义的 `beanClassName` 就断定最终对象类型。
-
-两个产品都经过属性填充与初始化，且共享同一个日志 Bean。工厂返回对象后，容器仍会按产品定义处理后续生命周期；不是“工厂负责 new，因此产品从此与容器无关”。关闭后的销毁也由测试验证。
-
-本例的 `NotifierFactory` 是一个普通 Java 类，没有实现 Spring 的 `FactoryBean` 接口。实例工厂方法配置与 `FactoryBean<T>` 是不同机制，后者在专门课程中展开。
-
-## 10. 用 Java 配置表达相同业务结果
-
-[JavaConfig.java](src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/JavaConfig.java) 保留与第一份 XML 相同的 Bean 名、依赖和属性。通知器方法为：
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/Notifier.java`。以下是本步该文件的完整内容。
 
 ```java
-@Bean(initMethod = "initialize", destroyMethod = "shutdown")
-public RouteNotifier notifier(DeliveryLog deliveryLog) {
-    var notifier = new RouteNotifier("email", deliveryLog);
-    notifier.setPrefix("[orders]");
-    notifier.setRecipients(List.of("ops@example.test"));
-    notifier.setHeaders(Map.of("region", "cn"));
-    return notifier;
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+public class Notifier {
+    private final String channel;
+
+    public Notifier(String channel) {
+        this.channel = channel;
+    }
+
+    public void send(String orderId) {
+        System.out.println(channel + " order=" + orderId);
+    }
 }
 ```
 
-这里 setter 在 `@Bean` 方法体内调用；方法返回之后，容器再按 `initMethod` 调用初始化。方法参数由容器注入，不依赖配置类方法之间的直接调用。
+Java 构造器已经改变，XML 也必须补上参数。`index="0"` 指向第0个参数；`value` 提供字符串字面值。入口暂时不用改。
+
+文件：`src/main/resources/practice008/beans.xml`。以下是本步该文件的完整内容。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd">
+    <bean id="notifier" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.Notifier">
+        <constructor-arg index="0" value="email"/>
+    </bean>
+</beans>
+```
+
+在 `08-01-spring-core-ioc` 目录执行：
 
 ```bash
-mvn -q -pl 008-xml-definition-inheritance exec:java -Dexec.args=java-config
+mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.mainClass=cn.ningbingjian.learnjava.ioc.lesson008.practice.Main
 ```
 
 ```text
-lifecycle.before=[init:email]
-deliveries=[email [orders] order=O-008 -> [ops@example.test] headers={region=cn}]
-same-reference=true
-lifecycle.after=[init:email, close:email]
+email order=O-008
 ```
 
-两个模式业务输出一致，但定义的内部表达并不完全一样：XML 直接记录通知器类、构造参数与属性值；`@Bean` 定义记录工厂方法，方法体中的 setter 调用属于普通 Java 代码，不会逐句变成定义里的 `PropertyValues`。
+输出与上一步相同，但渠道的来源变了。你现在可以只改 XML 的 `value="email"` 来选择渠道，不必修改业务方法。
 
-配套测试特意验证：XML 通知器定义有 `prefix` 属性元数据，Java 配置通知器定义没有这项属性元数据；两者仍能产生相同的前缀和业务行为。
+如果只改构造器、遗漏 XML，容器无法继续按原来的无参方式创建对象。这里先明确创建要求，再写配置去满足它。字符串也并不总能直接满足任意类型：数字、枚举等参数还涉及类型转换和构造器匹配。
 
-| 配置入口 | 通常在哪里表达装配 | 如何进入容器 | 阅读时的关键问题 |
-| --- | --- | --- | --- |
-| XML `<bean>` | 外部资源的参数、属性、引用及工厂信息 | XML 读取与解析后登记定义 | 资源是否加载，名称和类型是否正确 |
-| 组件注解与扫描 | 类上的角色标记、注入点及扫描配置 | 候选发现并登记定义，再由相关处理器处理 | 类为什么被纳入，依赖怎样解析 |
-| Java `@Bean` | 配置类方法和参数 | 配置解析后登记工厂方法定义 | 方法何时执行，返回对象由谁管理 |
+## 3. 希望保留通知记录，于是引入对象引用
 
-共同点是进入容器的定义与创建流程，不是三种入口生成的每一个字段都一致，也不是容器必须把所有 Java 代码翻译成 XML 式属性表。
+控制台输出不便于检查后续行为。先创建一个内存记录器，给它记录和读取消息的能力。这时只需要保存通知记录；生命周期事件等需要时再加入。它是单线程学习探针，不连接外部日志系统。
 
-## 11. 迁移旧 XML：先保留可验证的装配边界
-
-本课提供一个过渡入口 [ImportXmlConfig.java](src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/ImportXmlConfig.java)：
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/DeliveryLog.java`。以下是本步该文件的完整内容。
 
 ```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class DeliveryLog {
+    private final List<String> deliveries = new ArrayList<>();
+
+    public void record(String message) { deliveries.add(message); }
+    public List<String> deliveries() { return List.copyOf(deliveries); }
+}
+```
+
+接着让通知器通过构造器接收这个对象。`send` 的职责保持不变，只把输出写入记录器。
+
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/Notifier.java`。以下是本步该文件的完整内容。
+
+```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+public class Notifier {
+    private final String channel;
+    private final DeliveryLog log;
+
+    public Notifier(String channel, DeliveryLog log) {
+        this.channel = channel;
+        this.log = log;
+    }
+
+    public void send(String orderId) {
+        log.record(channel + " order=" + orderId);
+    }
+}
+```
+
+现在 XML 中要先有记录器的定义，再通过 `ref` 声明依赖关系。元素先后顺序不是本例引用能否解析的决定条件；读取时保存定义，创建时才解析引用。这里把依赖放前面，方便阅读。
+
+文件：`src/main/resources/practice008/beans.xml`。以下是本步该文件的完整内容。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd">
+    <bean id="deliveryLog" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.DeliveryLog"/>
+    <bean id="notifier" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.Notifier">
+        <constructor-arg index="0" value="email"/>
+        <constructor-arg index="1" ref="deliveryLog"/>
+    </bean>
+</beans>
+```
+
+因为 `send` 不再直接打印，入口也相应改为打印记录器的内容。
+
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/Main.java`。以下是本步该文件的完整内容。
+
+```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+import org.springframework.beans.factory.xml.XmlBeanDefinitionReader;
+import org.springframework.context.support.GenericApplicationContext;
+
+public class Main {
+    public static void main(String[] args) {
+        try (var context = new GenericApplicationContext()) {
+            new XmlBeanDefinitionReader(context).loadBeanDefinitions("classpath:practice008/beans.xml");
+            context.refresh();
+            context.getBean("notifier", Notifier.class).send("O-008");
+            System.out.println(context.getBean(DeliveryLog.class).deliveries());
+        }
+    }
+}
+```
+
+在 `08-01-spring-core-ioc` 目录执行：
+
+```bash
+mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.mainClass=cn.ningbingjian.learnjava.ioc.lesson008.practice.Main
+```
+
+```text
+[email order=O-008]
+```
+
+`value="deliveryLog"` 表达的是名字字符串，`ref="deliveryLog"` 表达的是命名对象引用。当前构造器需要 `DeliveryLog` 对象，因此必须传对象，不能把字符串当成对象替代。
+
+### 3.1 立刻改错一次引用，再修复
+
+保持 Java 代码不动，只把通知器引用改成不存在的 `missingLog`。下面是这次故意写错的 XML。
+
+文件：`src/main/resources/practice008/beans.xml`。以下是本步该文件的完整内容。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd">
+    <bean id="deliveryLog" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.DeliveryLog"/>
+    <bean id="notifier" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.Notifier">
+        <constructor-arg index="0" value="email"/>
+        <constructor-arg index="1" ref="missingLog"/>
+    </bean>
+</beans>
+```
+
+在 `08-01-spring-core-ioc` 目录执行：
+
+```bash
+mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.mainClass=cn.ningbingjian.learnjava.ioc.lesson008.practice.Main
+```
+
+```text
+No bean named 'missingLog' available
+```
+
+这条命令应失败，输出只截取稳定的根因片段。XML 的格式可以正确，定义也可以读入，但刷新期间创建通知器时找不到目标引用。
+
+不要换一个注解或反复调整 XML 缩进，应该核对引用名字以及目标定义是否真的加载。现在恢复引用，再运行确认，之后才进入下一步。
+
+文件：`src/main/resources/practice008/beans.xml`。以下是本步该文件的完整内容。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd">
+    <bean id="deliveryLog" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.DeliveryLog"/>
+    <bean id="notifier" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.Notifier">
+        <constructor-arg index="0" value="email"/>
+        <constructor-arg index="1" ref="deliveryLog"/>
+    </bean>
+</beans>
+```
+
+在 `08-01-spring-core-ioc` 目录执行：
+
+```bash
+mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.mainClass=cn.ningbingjian.learnjava.ioc.lesson008.practice.Main
+```
+
+```text
+[email order=O-008]
+```
+
+## 4. 增加一个可配置前缀，学习属性填充
+
+渠道和日志仍由构造器保证。前缀则提供一个默认空值，再通过 setter 配置。先在通知器中新增 `prefix` 字段与 `setPrefix`，并在消息中使用它。
+
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/Notifier.java`。以下是本步该文件的完整内容。
+
+```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+public class Notifier {
+    private final String channel;
+    private final DeliveryLog log;
+    private String prefix = "";
+
+    public Notifier(String channel, DeliveryLog log) {
+        this.channel = channel;
+        this.log = log;
+    }
+
+    public void setPrefix(String prefix) { this.prefix = prefix; }
+
+    public void send(String orderId) {
+        log.record(channel + " " + prefix + " order=" + orderId);
+    }
+}
+```
+
+XML 只增加 `property` 配置。它对应 JavaBean 可写属性 `setPrefix`，不是任意私有字段的直接写入指令。
+
+文件：`src/main/resources/practice008/beans.xml`。以下是本步该文件的完整内容。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd">
+    <bean id="deliveryLog" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.DeliveryLog"/>
+    <bean id="notifier" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.Notifier">
+        <constructor-arg index="0" value="email"/>
+        <constructor-arg index="1" ref="deliveryLog"/>
+        <property name="prefix" value="[orders]"/>
+    </bean>
+</beans>
+```
+
+在 `08-01-spring-core-ioc` 目录执行：
+
+```bash
+mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.mainClass=cn.ningbingjian.learnjava.ioc.lesson008.practice.Main
+```
+
+```text
+[email [orders] order=O-008]
+```
+
+通知内容现在带有 `[orders]`。本次创建顺序是先调用构造器得到对象，再填充 setter 属性。若把属性名写错，定义读取仍可能成功，而对象创建期间会报告属性不可写。后面提取模板后，我们会再观察继承属性与目标类不兼容的情况。
+
+## 5. 一个值不够了，再加入列表和 Map
+
+下一项需求是多个收件人以及附加字段。这时才需要 List 和 Map。通知器增加两个 setter；复制传入集合是为了避免外部直接修改当前保存的数据，输出 Map 使用 `TreeMap` 保持可读的排序。
+
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/Notifier.java`。以下是本步该文件的完整内容。
+
+```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
+public class Notifier {
+    private final String channel;
+    private final DeliveryLog log;
+    private String prefix = "";
+    private List<String> recipients = List.of();
+    private Map<String, String> headers = Map.of();
+
+    public Notifier(String channel, DeliveryLog log) {
+        this.channel = channel;
+        this.log = log;
+    }
+
+    public void setPrefix(String prefix) { this.prefix = prefix; }
+
+    public void setRecipients(List<String> recipients) { this.recipients = List.copyOf(recipients); }
+
+    public void setHeaders(Map<String, String> headers) { this.headers = new TreeMap<>(headers); }
+
+    public void send(String orderId) {
+        log.record(channel + " " + prefix + " order=" + orderId + " -> " + recipients + " headers=" + headers);
+    }
+}
+```
+
+在 XML 中为两个属性分别提供 `list` 与 `map`。当前只放一个收件人和一个字段，先确认装配路径，稍后在父子配置中再增加和合并。
+
+文件：`src/main/resources/practice008/beans.xml`。以下是本步该文件的完整内容。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd">
+    <bean id="deliveryLog" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.DeliveryLog"/>
+    <bean id="notifier" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.Notifier">
+        <constructor-arg index="0" value="email"/>
+        <constructor-arg index="1" ref="deliveryLog"/>
+        <property name="prefix" value="[orders]"/>
+        <property name="recipients"><list><value>ops@example.test</value></list></property>
+        <property name="headers"><map><entry key="region" value="cn"/></map></property>
+    </bean>
+</beans>
+```
+
+在 `08-01-spring-core-ioc` 目录执行：
+
+```bash
+mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.mainClass=cn.ningbingjian.learnjava.ioc.lesson008.practice.Main
+```
+
+```text
+[email [orders] order=O-008 -> [ops@example.test] headers={region=cn}]
+```
+
+观察到的列表与 Map 是实际对象上的数据。定义读取时它们先以配置元数据表示，创建对象时才解析为目标属性值。不要把“XML 里写了一串文字”与“最终 Java 类型是什么”混在一起。
+
+现在已经有构造器参数、引用和集合，但还没有初始化约束。下一步让通知器在接收配置后才能进入可用状态。
+
+## 6. 配置完整后才能发送：接入初始化和关闭
+
+新增一个需求：没有收件人时不能启动通知器，关闭后也不能继续发送。因此增加 `initialize`、`shutdown` 和 `ready`。注意，初始化检查必须等属性填充完成后才能进行，不能提前放进当前构造器。
+
+先给 DeliveryLog 增加事件列表以及 event、events 方法，用来记录初始化和关闭。此前的通知记录仍然保留。
+
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/DeliveryLog.java`。以下是本步该文件的完整内容。
+
+```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class DeliveryLog {
+    private final List<String> deliveries = new ArrayList<>();
+    private final List<String> events = new ArrayList<>();
+
+    public void record(String message) { deliveries.add(message); }
+    public void event(String message) { events.add(message); }
+    public List<String> deliveries() { return List.copyOf(deliveries); }
+    public List<String> events() { return List.copyOf(events); }
+}
+```
+
+然后修改通知器，接入可用状态与生命周期方法。
+
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/Notifier.java`。以下是本步该文件的完整内容。
+
+```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
+public class Notifier {
+    private final String channel;
+    private final DeliveryLog log;
+    private String prefix = "";
+    private List<String> recipients = List.of();
+    private Map<String, String> headers = Map.of();
+    private boolean ready;
+
+    public Notifier(String channel, DeliveryLog log) {
+        this.channel = channel;
+        this.log = log;
+    }
+
+    public void setPrefix(String prefix) { this.prefix = prefix; }
+
+    public void setRecipients(List<String> recipients) { this.recipients = List.copyOf(recipients); }
+
+    public void setHeaders(Map<String, String> headers) { this.headers = new TreeMap<>(headers); }
+
+    public void initialize() {
+        if (recipients.isEmpty()) { throw new IllegalStateException("recipients must not be empty"); }
+        ready = true;
+        log.event("init:" + channel);
+    }
+
+    public void shutdown() {
+        ready = false;
+        log.event("close:" + channel);
+    }
+
+    public void send(String orderId) {
+        if (!ready) { throw new IllegalStateException("notifier is not ready"); }
+        log.record(channel + " " + prefix + " order=" + orderId + " -> " + recipients + " headers=" + headers);
+    }
+}
+```
+
+Java 方法不会因为名字叫 initialize 就自动被容器执行。XML 需要明确写出 `init-method` 和 `destroy-method`。
+
+文件：`src/main/resources/practice008/beans.xml`。以下是本步该文件的完整内容。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd">
+    <bean id="deliveryLog" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.DeliveryLog"/>
+    <bean id="notifier" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.Notifier" init-method="initialize" destroy-method="shutdown">
+        <constructor-arg index="0" value="email"/>
+        <constructor-arg index="1" ref="deliveryLog"/>
+        <property name="prefix" value="[orders]"/>
+        <property name="recipients"><list><value>ops@example.test</value></list></property>
+        <property name="headers"><map><entry key="region" value="cn"/></map></property>
+    </bean>
+</beans>
+```
+
+入口取出记录器，分别在业务前与上下文关闭后查看事件。关闭后的记录器引用只用于观察结果，没有再次调用已关闭的通知器。
+
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/Main.java`。以下是本步该文件的完整内容。
+
+```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+import org.springframework.beans.factory.xml.XmlBeanDefinitionReader;
+import org.springframework.context.support.GenericApplicationContext;
+
+public class Main {
+    public static void main(String[] args) {
+        DeliveryLog log;
+        try (var context = new GenericApplicationContext()) {
+            new XmlBeanDefinitionReader(context).loadBeanDefinitions("classpath:practice008/beans.xml");
+            context.refresh();
+            log = context.getBean(DeliveryLog.class);
+            System.out.println("before=" + log.events());
+            context.getBean("notifier", Notifier.class).send("O-008");
+            System.out.println("deliveries=" + log.deliveries());
+        }
+        System.out.println("after=" + log.events());
+    }
+}
+```
+
+在 `08-01-spring-core-ioc` 目录执行：
+
+```bash
+mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.mainClass=cn.ningbingjian.learnjava.ioc.lesson008.practice.Main
+```
+
+```text
+before=[init:email]
+deliveries=[email [orders] order=O-008 -> [ops@example.test] headers={region=cn}]
+after=[init:email, close:email]
+```
+
+到这里才完整建立起本例生命周期：构造对象 → 填充配置 → 初始化 → 业务调用 → 关闭时销毁。`init:email` 与 `close:email` 是这条顺序的观察证据。
+
+单独删除 `init-method` 后，当前上下文仍可能完成启动，业务调用则因 `ready` 为 false 失败。这说明“能启动”与“对象已经按业务约定准备好”需要分别验证。该变体留作练习；下面继续使用已验证的正常配置。
+
+## 7. 先配置第二个通知器，亲眼看到重复
+
+现在要同时拥有邮件和短信通知器，它们共享前缀、收件人、字段和生命周期方法，渠道不同。先按已掌握的方式写出第二份定义，暂时不要引入新机制。将原 `notifier` 改名为 `emailNotifier`，新增 `smsNotifier`。
+
+文件：`src/main/resources/practice008/beans.xml`。以下是本步该文件的完整内容。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd">
+    <bean id="deliveryLog" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.DeliveryLog"/>
+    <bean id="emailNotifier" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.Notifier" init-method="initialize" destroy-method="shutdown">
+        <constructor-arg index="0" value="email"/>
+        <constructor-arg index="1" ref="deliveryLog"/>
+        <property name="prefix" value="[orders]"/>
+        <property name="recipients"><list><value>ops@example.test</value></list></property>
+        <property name="headers"><map><entry key="region" value="cn"/></map></property>
+    </bean>
+    <bean id="smsNotifier" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.Notifier" init-method="initialize" destroy-method="shutdown">
+        <constructor-arg index="0" value="sms"/>
+        <constructor-arg index="1" ref="deliveryLog"/>
+        <property name="prefix" value="[orders]"/>
+        <property name="recipients"><list><value>ops@example.test</value></list></property>
+        <property name="headers"><map><entry key="region" value="cn"/></map></property>
+    </bean>
+</beans>
+```
+
+因为名称和对象数量改变，入口也要明确分别获取两者。不能继续只按唯一类型取对象，因为现在有两个 `Notifier`。
+
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/Main.java`。以下是本步该文件的完整内容。
+
+```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+import org.springframework.beans.factory.xml.XmlBeanDefinitionReader;
+import org.springframework.context.support.GenericApplicationContext;
+
+public class Main {
+    public static void main(String[] args) {
+        DeliveryLog log;
+        try (var context = new GenericApplicationContext()) {
+            new XmlBeanDefinitionReader(context).loadBeanDefinitions("classpath:practice008/beans.xml");
+            context.refresh();
+            log = context.getBean(DeliveryLog.class);
+            System.out.println("before=" + log.events());
+            context.getBean("emailNotifier", Notifier.class).send("O-008");
+            context.getBean("smsNotifier", Notifier.class).send("O-008");
+            System.out.println("deliveries=" + log.deliveries());
+        }
+        System.out.println("after=" + log.events());
+    }
+}
+```
+
+在 `08-01-spring-core-ioc` 目录执行：
+
+```bash
+mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.mainClass=cn.ningbingjian.learnjava.ioc.lesson008.practice.Main
+```
+
+```text
+before=[init:email, init:sms]
+deliveries=[email [orders] order=O-008 -> [ops@example.test] headers={region=cn}, sms [orders] order=O-008 -> [ops@example.test] headers={region=cn}]
+after=[init:email, init:sms, close:sms, close:email]
+```
+
+这里记录的是当前运行的事件顺序；独立 Bean 之间的具体先后不应被当作业务执行契约。我们要确认的是每个通知器完成初始化，并在所属上下文关闭时被销毁。
+
+现在看 XML：两份构造器第1个参数、前缀、列表、Map、初始化与销毁配置几乎完全重复。若修改公共字段，就要维护两处。这是接下来提取父定义的实际原因。
+
+### 7.1 把公共配置提取成模板
+
+把公共部分挪到 `notifierTemplate`；子定义用 `parent` 指向它，并只覆盖构造器第0个参数。`abstract="true"` 表示模板不能直接作为业务对象请求。
+
+文件：`src/main/resources/practice008/beans.xml`。以下是本步该文件的完整内容。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd">
+    <bean id="deliveryLog" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.DeliveryLog"/>
+    <bean id="notifierTemplate" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.Notifier" abstract="true" init-method="initialize" destroy-method="shutdown">
+        <constructor-arg index="0" value="template"/>
+        <constructor-arg index="1" ref="deliveryLog"/>
+        <property name="prefix" value="[orders]"/>
+        <property name="recipients"><list><value>ops@example.test</value></list></property>
+        <property name="headers"><map><entry key="region" value="cn"/></map></property>
+    </bean>
+    <bean id="emailNotifier" parent="notifierTemplate">
+        <constructor-arg index="0" value="email"/>
+    </bean>
+    <bean id="smsNotifier" parent="notifierTemplate">
+        <constructor-arg index="0" value="sms"/>
+    </bean>
+</beans>
+```
+
+在 `08-01-spring-core-ioc` 目录执行：
+
+```bash
+mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.mainClass=cn.ningbingjian.learnjava.ioc.lesson008.practice.Main
+```
+
+```text
+before=[init:email, init:sms]
+deliveries=[email [orders] order=O-008 -> [ops@example.test] headers={region=cn}, sms [orders] order=O-008 -> [ops@example.test] headers={region=cn}]
+after=[init:email, init:sms, close:sms, close:email]
+```
+
+业务行为与关闭事件保持一致，但公共配置只有一份。容器先合并父子定义，再为两个名字创建各自对象，不需要创建一个“父通知器实例”。
+
+父子定义都使用同一个 Java 类，没有添加 `extends`。这里的 `abstract` 也是定义标志，与 Java 抽象类无关。构造参数使用明确索引，是为了让第0个参数的覆盖关系清楚可见。
+
+## 8. 子配置要增加收件人，先观察默认替换
+
+邮件现在希望增加业务负责人，同时改变 region 并增加 priority。先不写 `merge`，看看子集合默认做什么。短信则把收件人改为 `on-call`。
+
+文件：`src/main/resources/practice008/beans.xml`。以下是本步该文件的完整内容。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd">
+    <bean id="deliveryLog" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.DeliveryLog"/>
+    <bean id="notifierTemplate" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.Notifier" abstract="true" init-method="initialize" destroy-method="shutdown">
+        <constructor-arg index="0" value="template"/>
+        <constructor-arg index="1" ref="deliveryLog"/>
+        <property name="prefix" value="[orders]"/>
+        <property name="recipients"><list><value>ops@example.test</value></list></property>
+        <property name="headers"><map><entry key="region" value="cn"/><entry key="source" value="course"/></map></property>
+    </bean>
+    <bean id="emailNotifier" parent="notifierTemplate">
+        <constructor-arg index="0" value="email"/>
+        <property name="recipients"><list><value>owner@example.test</value></list></property>
+        <property name="headers">
+            <map><entry key="region" value="us"/><entry key="priority" value="high"/></map>
+        </property>
+    </bean>
+    <bean id="smsNotifier" parent="notifierTemplate">
+        <constructor-arg index="0" value="sms"/>
+        <property name="recipients"><list><value>on-call</value></list></property>
+    </bean>
+</beans>
+```
+
+在 `08-01-spring-core-ioc` 目录执行：
+
+```bash
+mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.mainClass=cn.ningbingjian.learnjava.ioc.lesson008.practice.Main
+```
+
+```text
+before=[init:email, init:sms]
+deliveries=[email [orders] order=O-008 -> [owner@example.test] headers={priority=high, region=us}, sms [orders] order=O-008 -> [on-call] headers={region=cn, source=course}]
+after=[init:email, init:sms, close:sms, close:email]
+```
+
+邮件列表只有负责人，公共邮箱消失了；邮件 Map 中的 source 也没有保留。这不是父定义没有生效，而是子集合替换了对应父集合。
+
+目标是“保留公共配置并增加差异”，所以现在只在邮件的**子集合**上启用 `merge="true"`。短信继续保留替换行为。
+
+文件：`src/main/resources/practice008/beans.xml`。以下是本步该文件的完整内容。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd">
+    <bean id="deliveryLog" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.DeliveryLog"/>
+    <bean id="notifierTemplate" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.Notifier" abstract="true" init-method="initialize" destroy-method="shutdown">
+        <constructor-arg index="0" value="template"/>
+        <constructor-arg index="1" ref="deliveryLog"/>
+        <property name="prefix" value="[orders]"/>
+        <property name="recipients"><list><value>ops@example.test</value></list></property>
+        <property name="headers"><map><entry key="region" value="cn"/><entry key="source" value="course"/></map></property>
+    </bean>
+    <bean id="emailNotifier" parent="notifierTemplate">
+        <constructor-arg index="0" value="email"/>
+        <property name="recipients"><list merge="true"><value>owner@example.test</value></list></property>
+        <property name="headers">
+            <map merge="true"><entry key="region" value="us"/><entry key="priority" value="high"/></map>
+        </property>
+    </bean>
+    <bean id="smsNotifier" parent="notifierTemplate">
+        <constructor-arg index="0" value="sms"/>
+        <property name="recipients"><list><value>on-call</value></list></property>
+    </bean>
+</beans>
+```
+
+在 `08-01-spring-core-ioc` 目录执行：
+
+```bash
+mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.mainClass=cn.ningbingjian.learnjava.ioc.lesson008.practice.Main
+```
+
+```text
+before=[init:email, init:sms]
+deliveries=[email [orders] order=O-008 -> [ops@example.test, owner@example.test] headers={priority=high, region=us, source=course}, sms [orders] order=O-008 -> [on-call] headers={region=cn, source=course}]
+after=[init:email, init:sms, close:sms, close:email]
+```
+
+邮件列表恢复公共邮箱，并在其后追加负责人；邮件 Map 保留 source，同名 region 使用子值，并增加 priority。短信列表仍只有 on-call。
+
+列表合并不负责业务去重；Map 同键按子值覆盖。`merge` 写在子集合上，不是写在 `<bean>` 上。它只合并父子定义中对应的集合配置，也要求父子集合类型兼容。
+
+现在的规则来自你刚才一次明确修改，不需要先背一张抽象规则表再猜它是否适用。
+
+## 9. 带着刚写的模板进入元数据和源码
+
+此时已经知道有效对象是什么样，接下来回答“父模板在哪一步参与了创建”。新增一个观察入口 `DefinitionMain.java`，保留业务入口 `Main`，不用来回改业务代码。
+
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/DefinitionMain.java`。以下是本步该文件的完整内容。
+
+```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+import java.util.List;
+import org.springframework.beans.factory.BeanIsAbstractException;
+import org.springframework.beans.factory.xml.XmlBeanDefinitionReader;
+import org.springframework.context.support.GenericApplicationContext;
+
+public class DefinitionMain {
+    public static void main(String[] args) {
+        try (var context = new GenericApplicationContext()) {
+            new XmlBeanDefinitionReader(context).loadBeanDefinitions("classpath:practice008/beans.xml");
+            var factory = context.getBeanFactory();
+            var raw = factory.getBeanDefinition("emailNotifier");
+            var merged = factory.getMergedBeanDefinition("emailNotifier");
+            System.out.println("raw-class=" + raw.getBeanClassName());
+            System.out.println("parent=" + raw.getParentName());
+            System.out.println("raw-size=" + ((List<?>) raw.getPropertyValues().get("recipients")).size());
+            System.out.println("merged-size=" + ((List<?>) merged.getPropertyValues().get("recipients")).size());
+            System.out.println("has-instance=" + factory.containsSingleton("emailNotifier"));
+            context.refresh();
+            try {
+                context.getBean("notifierTemplate");
+            } catch (BeanIsAbstractException error) {
+                System.out.println("template-error=" + error.getClass().getSimpleName());
+            }
+        }
+    }
+}
+```
+
+在 `08-01-spring-core-ioc` 目录执行：
+
+```bash
+mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.mainClass=cn.ningbingjian.learnjava.ioc.lesson008.practice.DefinitionMain
+```
+
+```text
+raw-class=null
+parent=notifierTemplate
+raw-size=1
+merged-size=2
+has-instance=false
+template-error=BeanIsAbstractException
+```
+
+原始子定义没有写 class，所以查询结果为 null；它只记录子列表的一项。合并结果中有两项，但查询合并定义并没有创建邮件单例。列表内部此时仍可能是 `TypedStringValue` 等元数据，不应强转为业务 `List<String>`。
+
+刷新后请求模板出现 `BeanIsAbstractException`，说明模板定义存在与模板可实例化是两件事。不要把服务引用指向抽象模板。
+
+现在在 Spring v7.0.9 的 `AbstractBeanFactory.getMergedBeanDefinition` 父定义分支设置断点，观察 parentBeanName，再看复制父定义与 `overrideFrom` 的调用。继续跟踪属性合并，便能进入 `ManagedList.merge` 和 `ManagedMap.merge`。不要在断点里主动调用 getBean，否则会把实例创建引入当前观察。
+
+源码：[AbstractBeanFactory](https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-beans/src/main/java/org/springframework/beans/factory/support/AbstractBeanFactory.java)、[AbstractBeanDefinition](https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-beans/src/main/java/org/springframework/beans/factory/support/AbstractBeanDefinition.java)、[ManagedList](https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-beans/src/main/java/org/springframework/beans/factory/support/ManagedList.java)、[ManagedMap](https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-beans/src/main/java/org/springframework/beans/factory/support/ManagedMap.java)。
+
+**定义继承也不是所有开关一律沿用父值。** 例如 XML 子 bean 的 lazy-init 会先按文档默认值解析，再参加合并。原有完整示例专门验证了父模板 lazy-init 为 true、子定义却为 false 的情况；这个边界及不同注册入口的区别见 [机制参考第7节](02-机制与边界参考.md#section-7)。
+
+## 10. 创建过程需要工厂时，只替换创建入口
+
+前面都直接调用通知器构造器。现在假设创建逻辑需要由工厂封装。先新增普通 Java 工厂类，分别提供静态和实例方法；通知器自身不需要改动。
+
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/NotifierFactory.java`。以下是本步该文件的完整内容。
+
+```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+public class NotifierFactory {
+    public static Notifier createStatic(String channel, DeliveryLog log) {
+        return new Notifier(channel, log);
+    }
+
+    public Notifier create(String channel, DeliveryLog log) {
+        return new Notifier(channel, log);
+    }
+}
+```
+
+这是沿现有程序做的另一种创建方式对照。本步用两份独立产品定义替换模板配置：邮件由静态方法创建，短信由工厂 Bean 的实例方法创建。将上一步合并后的收件人和 Map 显式展开，保持有效配置不变。它们仍需要初始化，不能因为工厂负责 new 就遗漏后续配置。
+
+文件：`src/main/resources/practice008/beans.xml`。以下是本步该文件的完整内容。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd">
+    <bean id="deliveryLog" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.DeliveryLog"/>
+    <bean id="emailNotifier" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.NotifierFactory" factory-method="createStatic"
+          init-method="initialize" destroy-method="shutdown">
+        <constructor-arg index="0" value="email"/>
+        <constructor-arg index="1" ref="deliveryLog"/>
+        <property name="prefix" value="[orders]"/>
+        <property name="recipients"><list><value>ops@example.test</value><value>owner@example.test</value></list></property>
+        <property name="headers"><map><entry key="region" value="us"/><entry key="source" value="course"/><entry key="priority" value="high"/></map></property>
+    </bean>
+    <bean id="notifierFactory" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.NotifierFactory"/>
+    <bean id="smsNotifier" factory-bean="notifierFactory" factory-method="create"
+          init-method="initialize" destroy-method="shutdown">
+        <constructor-arg index="0" value="sms"/>
+        <constructor-arg index="1" ref="deliveryLog"/>
+        <property name="prefix" value="[orders]"/>
+        <property name="recipients"><list><value>on-call</value></list></property>
+        <property name="headers"><map><entry key="region" value="cn"/><entry key="source" value="course"/></map></property>
+    </bean>
+</beans>
+```
+
+在 `08-01-spring-core-ioc` 目录执行：
+
+```bash
+mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.mainClass=cn.ningbingjian.learnjava.ioc.lesson008.practice.Main
+```
+
+```text
+before=[init:email, init:sms]
+deliveries=[email [orders] order=O-008 -> [ops@example.test, owner@example.test] headers={priority=high, region=us, source=course}, sms [orders] order=O-008 -> [on-call] headers={region=cn, source=course}]
+after=[init:email, init:sms, close:sms, close:email]
+```
+
+静态定义的 class 是工厂类，产品却是 Notifier；实例产品定义甚至没有 class，通过 factory-bean 找工厂对象。这时 `<constructor-arg>` 实际表达工厂方法参数，不能只按标签名字判断执行路径。
+
+业务入口 Main 无需改动，产品仍完成属性填充、初始化和销毁。当前工厂是普通 Java 类，并没有实现 `FactoryBean<T>`，不要把两个机制混为一谈。第9步的 DefinitionMain 专用于模板配置，本步改为工厂后继续运行 Main，不再拿已经移除的模板名查询。
+
+## 11. 迁移成 Java 配置时，先保持当前行为
+
+接着把当前两条通知器装配关系写成 Java 配置。先保留名称、收件人和生命周期配置，再考虑消除重复。`@Bean` 方法参数由容器提供，方法体负责设置属性。
+
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/JavaConfig.java`。以下是本步该文件的完整内容。
+
+```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+import java.util.List;
+import java.util.Map;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
 @Configuration(proxyBeanMethods = false)
-@ImportResource("classpath:lesson008/xml-basics.xml")
+public class JavaConfig {
+    @Bean
+    public DeliveryLog deliveryLog() { return new DeliveryLog(); }
+
+    @Bean(initMethod = "initialize", destroyMethod = "shutdown")
+    public Notifier emailNotifier(DeliveryLog deliveryLog) {
+        var notifier = new Notifier("email", deliveryLog);
+        notifier.setPrefix("[orders]");
+        notifier.setRecipients(List.of("ops@example.test", "owner@example.test"));
+        notifier.setHeaders(Map.of("region", "us", "source", "course", "priority", "high"));
+        return notifier;
+    }
+
+    @Bean(initMethod = "initialize", destroyMethod = "shutdown")
+    public Notifier smsNotifier(DeliveryLog deliveryLog) {
+        var notifier = new Notifier("sms", deliveryLog);
+        notifier.setPrefix("[orders]");
+        notifier.setRecipients(List.of("on-call"));
+        notifier.setHeaders(Map.of("region", "cn", "source", "course"));
+        return notifier;
+    }
+}
+```
+
+新增 JavaMain，业务调用与上一步保持相同，只把配置入口换掉。这个入口仅注册 JavaConfig，不同时导入 XML，避免两套同名定义混合。
+
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/JavaMain.java`。以下是本步该文件的完整内容。
+
+```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+
+public class JavaMain {
+    public static void main(String[] args) {
+        DeliveryLog log;
+        try (var context = new AnnotationConfigApplicationContext(JavaConfig.class)) {
+            log = context.getBean(DeliveryLog.class);
+            System.out.println("before=" + log.events());
+            context.getBean("emailNotifier", Notifier.class).send("O-008");
+            context.getBean("smsNotifier", Notifier.class).send("O-008");
+            System.out.println("deliveries=" + log.deliveries());
+        }
+        System.out.println("after=" + log.events());
+    }
+}
+```
+
+在 `08-01-spring-core-ioc` 目录执行：
+
+```bash
+mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.mainClass=cn.ningbingjian.learnjava.ioc.lesson008.practice.JavaMain
+```
+
+```text
+before=[init:email, init:sms]
+deliveries=[email [orders] order=O-008 -> [ops@example.test, owner@example.test] headers={priority=high, region=us, source=course}, sms [orders] order=O-008 -> [on-call] headers={region=cn, source=course}]
+after=[init:email, init:sms, close:sms, close:email]
+```
+
+比较业务消息和生命周期事件，确认创建入口变化没有丢失关键配置。两种方式的定义内部表达并不完全一致：XML 属性由定义元数据保存，Java 方法体中的 setter 则是普通代码，不会逐句变成 PropertyValues。
+
+若存量 XML 一时不能全部改写，可以先把 Java 入口与原配置连接。下面创建一个只导入 XML 的配置，再把 JavaMain 中注册的类型替换为它。
+
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/ImportXmlConfig.java`。以下是本步该文件的完整内容。
+
+```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.ImportResource;
+
+@Configuration(proxyBeanMethods = false)
+@ImportResource("classpath:practice008/beans.xml")
 public class ImportXmlConfig {
 }
 ```
 
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/JavaMain.java`。以下是本步该文件的完整内容。
+
+```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+
+public class JavaMain {
+    public static void main(String[] args) {
+        DeliveryLog log;
+        try (var context = new AnnotationConfigApplicationContext(ImportXmlConfig.class)) {
+            log = context.getBean(DeliveryLog.class);
+            System.out.println("before=" + log.events());
+            context.getBean("emailNotifier", Notifier.class).send("O-008");
+            context.getBean("smsNotifier", Notifier.class).send("O-008");
+            System.out.println("deliveries=" + log.deliveries());
+        }
+        System.out.println("after=" + log.events());
+    }
+}
+```
+
+在 `08-01-spring-core-ioc` 目录执行：
+
 ```bash
-mvn -q -pl 008-xml-definition-inheritance exec:java -Dexec.args=hybrid
+mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.mainClass=cn.ningbingjian.learnjava.ioc.lesson008.practice.JavaMain
 ```
 
 ```text
-lifecycle.before=[init:email]
-deliveries=[email [orders] order=O-008 -> [ops@example.test] headers={region=cn}]
-same-reference=true
-lifecycle.after=[init:email, close:email]
+before=[init:email, init:sms]
+deliveries=[email [orders] order=O-008 -> [ops@example.test, owner@example.test] headers={priority=high, region=us, source=course}, sms [orders] order=O-008 -> [on-call] headers={region=cn, source=course}]
+after=[init:email, init:sms, close:sms, close:email]
 ```
 
-这个入口仍由 XML 定义业务对象。它证明 Java 配置入口可以暂时保留既有 XML，而不是已经把全部定义迁移成 `@Bean`。当前没有同时注册 `JavaConfig`，因此没有让两套同名业务定义相互覆盖。
+输出一致，但此时业务对象仍由 XML 定义；这只是迁移入口，不表示 XML 已经改写成 @Bean。JavaConfig 文件仍在项目中，但这里没有注册它，也没有执行组件扫描去发现它。
 
-实际迁移可以按以下顺序进行：
+实际迁移时按一个对象组替换，移除对应旧定义，再比较名字、引用、集合、作用域和生命周期。尤其不要把列表合并默默改成替换，或遗漏初始化方法。
 
-1. 找到真实加载入口，包括 `<import>`、框架启动配置和 `@ImportResource`，确认哪份 XML 正在生效。
-2. 记录当前 Bean 名、别名、引用关系、作用域、初始化与销毁行为，以及父定义和集合合并的最终结果。
-3. 用容器测试固定关键行为。本例对照通知结果、对象引用和生命周期；只断言启动成功不足以确认语义一致。
-4. 按一个可独立验证的对象组改写为 Java 配置，同时移除该组旧定义，明确剩余 XML 的保留范围。
-5. 比较迁移前后有效配置。尤其检查合并列表是否变成了替换、Bean 名是否变化、原先的初始化方法是否遗漏。
+## 12. 最后区分父子容器与父子定义
 
-把有公共属性的父定义改成 Java 辅助方法，是一种代码复用选择，但 Java 辅助方法并不会自动保留 Spring 定义继承语义。应先展开并理解每个子定义的有效结果，再决定如何组织新代码。
+模板主线只用过一个上下文。现在再创建一个子上下文，让子服务使用父上下文已有的邮件通知器，看看这是另一种什么关系。
 
-如果旧 XML 还包含 `context:component-scan` 或其他命名空间解析功能，就不能按“每个 `<bean>` 改成一个方法”机械转换。它们可能还会注册基础设施；本课的纯 beans 配置没有演示这些额外机制。
+先创建一个小服务类，它只接收并使用通知器。
 
-## 12. 失败一：XML 能读入，对象引用却不存在
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/ChildService.java`。以下是本步该文件的完整内容。
 
-[xml-missing-ref.xml](src/main/resources/lesson008/xml-missing-ref.xml) 中，服务引用了没有注册的 `missingNotifier`。
+```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
 
-```bash
-mvn -q -pl 008-xml-definition-inheritance exec:java -Dexec.args=missing-ref
+public class ChildService {
+    private final Notifier notifier;
+
+    public ChildService(Notifier notifier) { this.notifier = notifier; }
+    public Notifier notifier() { return notifier; }
+}
 ```
 
-```text
-definitions-loaded=true
-failed-bean=orderService
-root-cause=NoSuchBeanDefinitionException
-active=false
-```
-
-`definitions-loaded=true` 表示资源语法和基本定义读取已经通过。`ref` 在定义中先作为引用元数据存在，不要求 XML 读到这一行时目标对象就已经创建。
-
-刷新时服务开始创建，容器解析该引用，才发现目标名字不存在。测试同时检查失败 Bean 为 `orderService`、最深层异常为 `NoSuchBeanDefinitionException`，以及缺失名字确实是 `missingNotifier`。
-
-排查顺序应围绕这条引用：名字是否拼错、目标所在资源是否加载、迁移是否删掉了旧定义、引用是否指向错误的上下文。这个例子并不是 XML 格式错误，重新调整缩进不会解决依赖缺失。
-
-演示会打印 Spring 取消刷新的警告，再输出异常摘要。命令正常退出表示入口捕获了这个预期失败；是否符合预期，由配套异常断言验证。
-
-## 13. 失败二：子定义指定了 class，却无法接收继承属性
-
-[xml-incompatible-class.xml](src/main/resources/lesson008/xml-incompatible-class.xml) 使用没有指定类的抽象模板：
+文件：`src/main/resources/practice008/child.xml`。以下是本步该文件的完整内容。
 
 ```xml
-<bean id="propertyTemplate" abstract="true">
-    <property name="prefix" value="[orders]"/>
-</bean>
-<bean id="invalidTarget" parent="propertyTemplate" class="java.lang.Object"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd">
+    <bean id="childService" class="cn.ningbingjian.learnjava.ioc.lesson008.practice.ChildService">
+        <constructor-arg ref="emailNotifier"/>
+    </bean>
+</beans>
 ```
 
-模板可以只声明公共属性，具体子定义自己提供类。本例故意选用 `Object`，它没有 `setPrefix(...)`。
+新增层级入口：父上下文继续读取当前工厂 XML；子上下文只读取 child.xml，在刷新前通过 setParent 关联父级。
+
+文件：`src/main/java/cn/ningbingjian/learnjava/ioc/lesson008/practice/HierarchyMain.java`。以下是本步该文件的完整内容。
+
+```java
+package cn.ningbingjian.learnjava.ioc.lesson008.practice;
+
+import org.springframework.beans.factory.xml.XmlBeanDefinitionReader;
+import org.springframework.context.support.GenericApplicationContext;
+
+public class HierarchyMain {
+    public static void main(String[] args) {
+        try (var parent = new GenericApplicationContext()) {
+            new XmlBeanDefinitionReader(parent).loadBeanDefinitions("classpath:practice008/beans.xml");
+            parent.refresh();
+            var email = parent.getBean("emailNotifier", Notifier.class);
+            var log = parent.getBean(DeliveryLog.class);
+            try (var child = new GenericApplicationContext()) {
+                child.setParent(parent);
+                new XmlBeanDefinitionReader(child).loadBeanDefinitions("classpath:practice008/child.xml");
+                child.refresh();
+                System.out.println("local-definition=" + child.containsBeanDefinition("emailNotifier"));
+                System.out.println("same-parent-object=" + (child.getBean(ChildService.class).notifier() == email));
+                System.out.println("parent-sees-child=" + parent.containsBean("childService"));
+            }
+            System.out.println("closed-after-child=" + log.events().stream().filter(e -> e.startsWith("close:")).count());
+            email.send("O-008");
+            System.out.println("parent-still-usable=true");
+        }
+    }
+}
+```
+
+在 `08-01-spring-core-ioc` 目录执行：
 
 ```bash
-mvn -q -pl 008-xml-definition-inheritance exec:java -Dexec.args=incompatible-class
+mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.mainClass=cn.ningbingjian.learnjava.ioc.lesson008.practice.HierarchyMain
 ```
 
 ```text
-definitions-loaded=true
-failed-bean=invalidTarget
-root-cause=NotWritablePropertyException
-active=false
+local-definition=false
+same-parent-object=true
+parent-sees-child=false
+closed-after-child=0
+parent-still-usable=true
 ```
 
-定义合并本身成功：有效类型是 `java.lang.Object`，有效属性包含 `prefix`。随后创建对象并填充属性时失败，最深层异常是 `NotWritablePropertyException`。
+子容器本地没有通知器定义，却能通过父级查找拿到父容器对象；父容器不能反向找到子服务。关闭子容器没有销毁父级通知器，它还可以继续发送，随后才随父上下文关闭。
 
-这说明定义继承没有要求子 Java 类必须 `extends` 某个父 Java 类，却要求最终类能实际接收继承下来的配置。除属性外，还应检查继承的构造参数、工厂信息和生命周期方法是否与最终类型匹配。
+| 关系 | 连接什么 | 刚才的实现 |
+| --- | --- | --- |
+| 定义继承 | 两份配置定义 | 第7步 parent 属性指向抽象模板，合并后创建子 Bean |
+| Java 继承 | Java 类型 | 本页没有靠 extends 建立通知器父子类型 |
+| 容器层级 | 两个上下文 | 本步 setParent 提供向父级查找对象的路径 |
 
-本例的失败点是属性填充。不要把所有父子定义错误都归为“合并失败”：父定义名字不存在、构造器不匹配、属性不可写和初始化异常，发生的位置及排查入口都不同。
+它们可以在复杂系统中组合，但不是同一个“父子”概念。继承配置也要求目标类能接收那些构造参数、属性和生命周期方法；例如让没有 setPrefix 的 Object 使用 prefix 模板，会在属性填充阶段失败。这个隔离样例与更详细的解析链路保留在 [机制参考第13—15节](02-机制与边界参考.md#section-13)。
 
-## 14. 父子定义、Java 继承、父子容器是三种关系
+## 13. 完成后回看自己的实现过程
 
-| 关系 | 连接的对象 | 核心作用 | 本课例子 |
-| --- | --- | --- | --- |
-| 定义继承 | 两份 BeanDefinition | 复用并合并配置数据 | `emailNotifier` 的 `parent="notifierTemplate"` |
-| Java 类继承 | Java 类型 | 语言层面的成员继承和类型关系 | 本课通知器是 `final`，没有业务父子类体系 |
-| 父子容器 | 两个上下文或 BeanFactory | 分层持有对象，并提供向父级查找的路径 | 子容器中的服务引用父容器的通知器 |
+现在你已经亲手从一个 bean 元素走到对象引用、属性和集合，先经历重复配置，再提取父定义，随后验证合并规则并进入源码。每个概念都对应过一次明确的程序修改。
 
-邮件、短信对象都属于同一个 `RouteNotifier` 类。它们的定义分别使用模板，并没有生成两个 Java 子类，也没有自动创建两个上下文。
+尝试独立回答：为什么配置格式正确仍可能引用失败？为什么父模板不需要对象实例？为什么开启 merge 后邮件增加了公共邮箱？工厂返回产品后，谁继续执行初始化？关闭子容器为什么不销毁父通知器？
 
-为了把父子容器的区别落实到运行结果，[xml-child-context.xml](src/main/resources/lesson008/xml-child-context.xml) 只定义 `childService`，其构造器引用 `notifier`。父容器加载 `xml-basics.xml`，子容器在刷新前通过 `setParent(parent)` 与它关联。
+第9步的 DefinitionMain 对应模板配置；完成后续工厂改写后，请使用相应步骤入口，或恢复第8步 XML 再观察模板。
 
-```bash
-mvn -q -pl 008-xml-definition-inheritance exec:java -Dexec.args=hierarchy
-```
+本页各步已从不存在的 practice 目录逐步编译和运行验证，包括引用错误及修复。原有十个完整场景和十二个测试仍保留，可运行 `mvn -pl 008-xml-definition-inheritance -am test` 对照边界；第001—008课原有聚合测试仍共75个。完整输出对照、lazy-init 边界、失败定位和源码入口见 [机制与边界参考](02-机制与边界参考.md)。
 
-```text
-child-local-notifier=false
-child-can-find-notifier=true
-child-uses-parent-instance=true
-parent-can-find-child-service=false
-parent-notifier-ready-after-child-close=true
-```
+下一课：[08-01-009 编程式注册与外部对象接入](../00-模块学习大纲.md#lesson-009)。
 
-子容器本地没有 `notifier` 定义，因此 `containsBeanDefinition` 为 `false`；通过层级查找可以找到父容器的对象，因此 `containsBean` 为 `true`。子服务持有的正是父容器中已经存在的通知器，父容器则不能反向找到 `childService`。
-
-关闭子容器后，父通知器仍处于可用状态，因为它由父容器管理，随后才随父容器关闭而销毁。测试验证了这个生命周期归属。本例没有父子同名对象，也没有展开多层容器的类型查询规则；这里需要掌握的是层级查找与定义模板合并属于不同关系。
-
-这两种容器机制可以在更复杂配置中组合，不能因为本课把它们分开解释，就推断定义继承永远只允许在同一个 BeanFactory 内解析。遇到实际工程，应分别画清定义的 `parent` 指向和上下文的父级关系。
-
-## 15. 沿着 XML 解析与定义合并进入源码
-
-源码固定为 **Spring v7.0.9**。第003课已有调试环境说明，本课建议先用 `definitions` 模式，避免启动业务对象时大量创建调用干扰当前观察。
-
-1. 在 `XmlBeanDefinitionReader.loadBeanDefinitions` 观察实际资源位置；继续看 `doLoadBeanDefinitions` 如何获得 XML 文档并交给定义注册过程。
-2. 在 `BeanDefinitionParserDelegate.parseBeanDefinitionElement` 观察 `id`、`class`、`parent`；在属性、构造参数和集合解析方法中观察引用与集合元数据的形成。
-3. XML 加载返回后，在应用代码检查 `getBeanDefinition("emailNotifier")`。此时原始子定义没有类名，只包含它自己声明的差异。
-4. 单步进入 `AbstractBeanFactory.getMergedBeanDefinition`。在处理父定义的分支观察 `parentBeanName`，再看 `new RootBeanDefinition(pbd)` 与 `mbd.overrideFrom(bd)`。
-5. 在 `AbstractBeanDefinition.overrideFrom` 观察子定义如何补充和覆盖配置。集合属性继续进入 `MutablePropertyValues` 的属性合并逻辑，再进入 `ManagedList.merge`、`ManagedMap.merge`。
-6. 返回应用代码，再观察有效类名、构造参数、收件人数量及单例缓存。此时没有 `refresh()`，合并得到有效定义并没有自动触发通知器构造。
-
-源码入口：[XmlBeanDefinitionReader](https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-beans/src/main/java/org/springframework/beans/factory/xml/XmlBeanDefinitionReader.java)、[BeanDefinitionParserDelegate](https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-beans/src/main/java/org/springframework/beans/factory/xml/BeanDefinitionParserDelegate.java)、[AbstractBeanFactory](https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-beans/src/main/java/org/springframework/beans/factory/support/AbstractBeanFactory.java)、[MutablePropertyValues](https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-beans/src/main/java/org/springframework/beans/MutablePropertyValues.java)。
-
-`getMergedBeanDefinition` 有多个重载。使用方法断点时应选择接收 `beanName`、`BeanDefinition`、`containingBd` 的实现，或直接在父定义分支设置行断点。单次查询也可能递归处理父模板，不要把“进入两次”直接当成重复创建对象。
-
-调试元数据时不要主动求值 `getBean()`；它会引入实例创建。也不要在这里修改定义后便假定已创建对象随之更新：合并元数据、缓存失效与对象生命周期是不同问题，后续课程会继续展开。
-
-## 16. 十二个测试与下一步
-
-[XmlDefinitionInheritanceTest.java](src/test/java/cn/ningbingjian/learnjava/ioc/lesson008/XmlDefinitionInheritanceTest.java) 包含十二个测试，分别验证：
-
-1. XML 引用、集合和属性能够组装并执行通知业务。
-2. 初始化和销毁确实作用于被管理的通知器实例。
-3. 原始定义与合并定义不同，合并查询不创建业务对象。
-4. 子定义覆盖普通属性和指定索引参数，并按规则合并列表与 Map。
-5. 未启用合并的列表替换父列表，模板不产生实例。
-6. 抽象定义不能直接请求，即使 Java 类本身可实例化。
-7. 不存在的 `ref` 在创建阶段产生明确的缺失对象错误。
-8. 继承属性与目标类型不兼容时，在属性填充阶段失败。
-9. 静态、实例工厂产品继续接受初始化及销毁管理。
-10. Java 配置与 XML 业务行为一致，但定义表达有所不同。
-11. `@ImportResource` 入口保留 XML 业务装配并且没有重复通知器。
-12. 子容器向父级查找依赖，关闭子容器不销毁父级对象。
-
-单独测试本课：
-
-```bash
-mvn -pl 008-xml-definition-inheritance -am test
-```
-
-修改源码或 XML 后重新编译并运行：
-
-```bash
-mvn -q -pl 008-xml-definition-inheritance compile exec:java -Dexec.args=inheritance
-```
-
-`compile` 会连同资源处理一起执行，因此这里也适用于修改 `src/main/resources` 中的 XML。只运行 `exec:java` 时，应确认 `target/classes` 已包含最新源码和资源。
-
-第001—008课聚合构建共 **75 个测试**。十个演示模式已逐一运行，预期失败模式的异常摘要与测试断言一致。父模板的 `lazy-init` 行为与集合合并结果均按当前固定版本验证。
-
-可以继续做三个单变量练习：删除邮件子列表的 `merge="true"`，预测列表内容；给邮件子定义显式加 `lazy-init="true"`，在没有其他对象依赖它时观察创建时机；把 Java 配置的初始化方法配置去掉，判断上下文启动与业务调用哪个先暴露问题。仓库保留的是正文已经验证的版本，这些变体需要你修改后再运行。
-
-下一课：[08-01-009 编程式注册与外部对象接入](../00-模块学习大纲.md#lesson-009)。我们会比较定义注册、`registerBean` 与已有实例接入，并进一步明确初始化、后处理和销毁分别由谁负责。
