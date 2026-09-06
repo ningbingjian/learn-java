@@ -11,6 +11,7 @@
 
     <modules>
         <module>001-why-spring-container</module>
+        <module>002-ioc-di-object-assembly</module>
     </modules>
 
     <properties>
