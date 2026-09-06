@@ -15,6 +15,7 @@
         <module>003-runnable-debuggable-spring</module>
         <module>004-java-config-object-assembly</module>
         <module>005-maintainable-container-tests</module>
+        <module>006-bean-definition-model</module>
     </modules>
 
     <properties>
