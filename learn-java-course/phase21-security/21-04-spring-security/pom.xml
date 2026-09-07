@@ -21,5 +21,6 @@
     </properties>
     <modules>
         <module>21-04-001-hello-spring-security</module>
+        <module>21-04-002-explicit-security-filter-chain</module>
     </modules>
 </project>

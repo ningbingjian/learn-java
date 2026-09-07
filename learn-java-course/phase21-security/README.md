@@ -25,4 +25,4 @@ Spring Security 模块讲应用怎样消费身份、实施访问控制；授权�
 
 ## 当前进度
 
-已建立 [21-04模块入口](21-04-spring-security/README.md)、[逐课大纲](21-04-spring-security/00-模块学习大纲.md)、[版本基线](21-04-spring-security/01-版本基线.md)，并提供独立前端、浏览器联合验证和[第001课正文与源码](21-04-spring-security/21-04-001-hello-spring-security/README.md)。Spring Security大纲已细化为八篇89课（80课主线、9课选修），只有第001课已实现，第002课及后续课程仍待编写。其余模块目前仍为总纲规划，不代表已经提供课程正文。
+已建立 [21-04模块入口](21-04-spring-security/README.md)、[逐课大纲](21-04-spring-security/00-模块学习大纲.md)、[版本基线](21-04-spring-security/01-版本基线.md)，并提供独立前端、浏览器联合验证，以及[第001课](21-04-spring-security/21-04-001-hello-spring-security/README.md)和[第002课正文与源码](21-04-spring-security/21-04-002-explicit-security-filter-chain/README.md)。Spring Security大纲已细化为八篇89课（80课主线、9课选修），第001、002课已实现，第003课及后续课程仍待编写。其余模块目前仍为总纲规划，不代表已经提供课程正文。
