@@ -20,3 +20,6 @@ Thumbs.db
 *.log
 build/
 out/
+
+# 第一课按正文创建的独立跟写目录
+/work/security-followalong/
