@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>请求观察台 · Spring Security 第四课</title>
+  <link rel="icon" href="data:," />
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">SPRING SECURITY / 21-04-004</p>
+      <h1>规则写在前面，<br />就一定更先执行吗？</h1>
+      <p class="intro">对照路径、方法与默认拒绝规则。页面保持匿名，带身份的对照在正文终端实验中完成。</p>
+    </header>
+    <section class="request-panel" aria-labelledby="public-title">
+      <div>
+        <h2 id="public-title">公开信息</h2>
+        <p class="endpoint"><span>GET</span> /api/public/info</p>
+        <p class="hint">开发代理转发到后端 /public/info，允许匿名 GET。</p>
+      </div>
+      <button id="send-public" type="button" data-path="/api/public/info">访问公开信息</button>
+    </section>
+    <section class="request-panel" aria-labelledby="request-title">
+      <div>
+        <h2 id="request-title">受保护接口</h2>
+        <p class="endpoint"><span>GET</span> /api/hello</p>
+        <p class="hint">页面地址经过开发代理，对应后端的 /hello。</p>
+      </div>
+      <button id="send-request" type="button" data-path="/api/hello">访问受保护接口</button>
+    </section>
+    <section class="request-panel" aria-labelledby="invalid-title">
+      <div>
+        <h2 id="invalid-title">业务参数错误对照</h2>
+        <p class="endpoint"><span>GET</span> /api/public/info?lang=unknown</p>
+        <p class="hint">公开接口只支持en或zh，观察非法参数如何返回400。</p>
+      </div>
+      <button id="send-invalid" type="button" data-path="/api/public/info?lang=unknown">查看参数错误对照</button>
+    </section>
+    <section class="request-panel" aria-labelledby="near-title">
+      <div><h2 id="near-title">近似路径</h2>
+        <p class="endpoint"><span>GET</span> /api/public/info-extra</p>
+        <p class="hint">名称相似不代表属于公开入口。</p></div>
+      <button type="button" data-path="/api/public/info-extra" data-method="GET">访问近似路径</button>
+    </section>
+    <section class="request-panel" aria-labelledby="unknown-title">
+      <div><h2 id="unknown-title">未知路径</h2>
+        <p class="endpoint"><span>GET</span> /api/missing</p>
+        <p class="hint">未列入允许清单，不因登录而自动开放。</p></div>
+      <button type="button" data-path="/api/missing" data-method="GET">访问未知路径</button>
+    </section>
+    <section class="request-panel" aria-labelledby="method-title">
+      <div><h2 id="method-title">同路径换方法</h2>
+        <p class="endpoint"><span>OPTIONS</span> /api/public/info</p>
+        <p class="hint">这是同源普通OPTIONS请求，用来与GET比较；不是跨域预检。</p></div>
+      <button type="button" data-path="/api/public/info" data-method="OPTIONS">用 OPTIONS 访问公开路径</button>
+    </section>
+    <section class="result-panel" aria-labelledby="result-title" aria-busy="false">
+      <div class="result-heading">
+        <h2 id="result-title">本次请求结果</h2>
+        <span id="status-code" class="status-code" data-state="idle">尚未请求</span>
+      </div>
+      <p id="result-summary" role="status" aria-live="polite">点击按钮后，这里会显示真实响应。</p>
+      <dl>
+        <div><dt>本次路径</dt><dd id="request-path">—</dd></div>
+        <div><dt>请求条件</dt><dd>Accept: application/json · 不携带身份凭据</dd></div>
+        <div><dt>错误代码</dt><dd id="error-code">—</dd></div>
+        <div><dt>响应来源</dt><dd id="response-source">—</dd></div>
+      </dl>
+      <button id="retry-request" type="button" data-path="" hidden>重试本次请求</button>
+      <h3>响应内容</h3>
+      <pre id="response-body" tabindex="0" aria-label="响应内容">等待请求。</pre>
+    </section>
+    <aside aria-labelledby="observe-title">
+      <h2 id="observe-title">把页面结果与后端执行对应起来</h2>
+      <ol>
+        <li><strong>看状态：</strong>200表示成功；401表示本次未通过认证；400参数错误需要修改输入。</li>
+        <li><strong>看请求：</strong>在浏览器 Network 中找到 /api/public/info 或 /api/hello，检查状态与请求头。</li>
+        <li><strong>看日志：</strong>401是否记录API_AUTHENTICATION_REQUIRED；400是否记录PUBLIC_INFO_HANDLER_REACHED及MVC_ERROR_HANDLED？</li>
+      </ol>
+      <p>本课只观察匿名访问。登录表单、会话保持与角色权限将在后续课程逐步加入。</p>
+    </aside>
+    <footer>第四课 · 请求匹配顺序与默认拒绝边界</footer>
+  </main>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
