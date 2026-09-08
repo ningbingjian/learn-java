@@ -25,5 +25,6 @@
         <module>21-04-003-api-authentication-errors</module>
         <module>21-04-004-request-matching-boundaries</module>
         <module>21-04-005-users-and-password-encoding</module>
+        <module>21-04-006-csrf-before-login</module>
     </modules>
 </project>
