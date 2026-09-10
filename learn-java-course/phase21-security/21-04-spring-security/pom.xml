@@ -27,5 +27,6 @@
         <module>21-04-005-users-and-password-encoding</module>
         <module>21-04-006-csrf-before-login</module>
         <module>21-04-007-form-login-session</module>
+        <module>21-04-008-current-user-restoration</module>
     </modules>
 </project>

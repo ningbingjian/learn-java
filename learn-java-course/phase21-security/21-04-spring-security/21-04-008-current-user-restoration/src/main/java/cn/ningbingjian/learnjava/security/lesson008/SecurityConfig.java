@@ -1,0 +1,60 @@
+package cn.ningbingjian.learnjava.security.lesson008;
+
+import java.util.Set;
+
+import jakarta.servlet.DispatcherType;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.DelegatingAuthenticationEntryPoint;
+import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import org.springframework.security.web.authentication.www.BasicAuthenticationEntryPoint;
+import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
+import org.springframework.security.web.util.matcher.AnyRequestMatcher;
+
+@Configuration(proxyBeanMethods = false)
+public class SecurityConfig {
+    @Bean
+    SecurityFilterChain securityFilterChain(HttpSecurity http, ApiAuthenticationEntryPoint apiEntryPoint,
+            FormLoginHandlers loginHandlers)
+            throws Exception {
+        var jsonRequest = new MediaTypeRequestMatcher(MediaType.APPLICATION_JSON);
+        jsonRequest.setIgnoredMediaTypes(Set.of(MediaType.ALL));
+        var htmlRequest = new MediaTypeRequestMatcher(MediaType.TEXT_HTML);
+        htmlRequest.setIgnoredMediaTypes(Set.of(MediaType.ALL));
+
+        var basicEntryPoint = new BasicAuthenticationEntryPoint();
+        basicEntryPoint.setRealmName("Realm");
+        basicEntryPoint.afterPropertiesSet();
+        AuthenticationEntryPoint entryPoint = DelegatingAuthenticationEntryPoint.builder()
+                .addEntryPointFor(apiEntryPoint, jsonRequest)
+                .addEntryPointFor(new LoginUrlAuthenticationEntryPoint("/login"), htmlRequest)
+                .defaultEntryPoint(basicEntryPoint)
+                .build();
+
+        http.authorizeHttpRequests(authorize -> authorize
+                // 仅允许容器内部的错误分派；外部直接请求/error仍受下方规则约束。
+                .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                .requestMatchers(HttpMethod.GET, "/csrf").permitAll()
+                .requestMatchers(HttpMethod.POST, "/csrf-probe").permitAll()
+                .requestMatchers(HttpMethod.GET, "/public/info").permitAll()
+                .requestMatchers("/public/**").denyAll()
+                .requestMatchers(HttpMethod.GET, "/hello").authenticated()
+                .requestMatchers(HttpMethod.GET, "/me").authenticated()
+                .anyRequest().denyAll());
+        http.formLogin(form -> form
+                .successHandler(loginHandlers::onSuccess)
+                .failureHandler(loginHandlers::onFailure)
+                .permitAll());
+        // 缺少身份与Basic凭据失败来自不同调用位置，但使用相同的响应选择策略。
+        http.exceptionHandling(exceptions -> exceptions
+                .defaultAuthenticationEntryPointFor(entryPoint, AnyRequestMatcher.INSTANCE));
+        http.httpBasic(basic -> basic.authenticationEntryPoint(entryPoint));
+        return http.build();
+    }
+}
