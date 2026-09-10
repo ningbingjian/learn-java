@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>请求观察台 · Spring Security 第八课</title>
+  <link rel="icon" href="data:," />
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">SPRING SECURITY / 21-04-008</p>
+      <h1>刷新页面后，<br />当前用户由谁确认？</h1>
+      <p class="intro">页面启动与登录后向后端查询身份。区分加载、已登录、未登录和暂时无法确认。</p>
+    </header>
+    <section class="identity-panel" id="current-user" data-state="loading" aria-labelledby="current-user-title">
+      <h2 id="current-user-title">后端确认的当前身份</h2>
+      <p id="current-user-status" role="status" aria-live="polite">正在向后端确认当前身份…</p>
+      <p>用户名：<strong id="current-user-name">—</strong></p>
+      <p>权限标识：<span id="current-user-authorities">—</span></p>
+      <button id="current-user-refresh" type="button" disabled>重新查询当前身份</button>
+      <p class="hint">这里读取当前会话的 /me，不把账号选择框或本地存储当成登录证明。权限标识用于观察，业务授权在后续课程实现。</p>
+    </section>
+    <section class="identity-panel" aria-labelledby="login-title">
+      <h2 id="login-title">表单登录与会话验证</h2>
+      <form id="login-form" method="post">
+        <label for="login-name">实验账号</label>
+        <select id="login-name" name="username" autocomplete="username">
+          <option value="member">member · 普通用户</option><option value="support">support · 客服</option><option value="admin">admin · 管理员</option>
+        </select>
+        <label for="login-password">本机实验密码</label>
+        <input id="login-password" name="password" type="password" autocomplete="off" maxlength="72" required />
+        <button id="login-submit" type="submit" disabled>提交登录表单</button>
+      </form>
+      <p id="login-result" role="status" aria-live="polite">本页尚未提交登录；当前身份见上方后端查询结果。</p>
+      <p id="login-status">尚未提交</p>
+      <button id="session-hello" type="button">携带会话访问 /hello</button>
+      <p id="session-result" role="status" aria-live="polite">使用会话按钮验证后续请求，不根据页面文字推断身份。</p>
+      <p class="hint">密码提交后清空；不放入URL或存储。CSRF区与登录共用令牌，登录后重新取得。真实网络必须使用HTTPS。</p>
+    </section>
+    <section class="identity-panel" aria-labelledby="csrf-title">
+      <h2 id="csrf-title">共用的CSRF准备与实验</h2>
+      <p id="csrf-state" role="status" aria-live="polite">正在准备令牌…</p>
+      <p class="hint">令牌只保存在页面内存，不显示其内容；会话Cookie由浏览器管理。此处只准备令牌或提交探针，不修改业务数据。</p>
+      <div class="csrf-actions">
+        <button id="csrf-init" type="button">重新取得令牌</button>
+        <button type="button" data-csrf-mode="valid" disabled>携带令牌提交</button>
+        <button type="button" data-csrf-mode="missing" disabled>故意不带令牌</button>
+        <button type="button" data-csrf-mode="wrong" disabled>故意带错误令牌</button>
+        <button type="button" data-csrf-mode="no-cookie" disabled>故意不带会话Cookie</button>
+      </div>
+      <p id="csrf-summary" role="status" aria-live="polite">初始化不会自动发送POST，准备好后由你选择提交。</p>
+      <p id="csrf-http-status">尚未提交POST</p>
+      <pre id="csrf-response" tabindex="0" aria-label="CSRF实验响应">等待实验。这里不会显示令牌或Cookie。</pre>
+    </section>
+    <section class="identity-panel" aria-labelledby="identity-title">
+      <h2 id="identity-title">实验身份</h2>
+      <p>member：普通用户 · support：客服 · admin：管理员。本课三者都能访问 /hello，角色授权在后续课程实现。</p>
+      <form id="identity-form" method="post">
+        <label for="identity-name">实验账号</label>
+        <select id="identity-name" name="username" autocomplete="username">
+          <option value="member">member · 普通用户</option><option value="support">support · 客服</option><option value="admin">admin · 管理员</option>
+        </select>
+        <label for="identity-password">本机启动时为该账号设置的密码</label>
+        <input id="identity-password" name="password" type="password" autocomplete="off" maxlength="72" required />
+        <button id="verify-identity" type="submit" data-path="/api/hello" data-identity="true">验证本次身份</button>
+      </form>
+      <p class="hint">只用于本机课程实验。密码不会写入结果区或持久保存，提交后清空；认证失败请重新输入。Basic编码不是加密，真实环境必须使用HTTPS。</p>
+    </section>
+    <section class="request-panel" aria-labelledby="public-title">
+      <div>
+        <h2 id="public-title">公开信息</h2>
+        <p class="endpoint"><span>GET</span> /api/public/info</p>
+        <p class="hint">开发代理转发到后端 /public/info，允许匿名 GET。</p>
+      </div>
+      <button id="send-public" type="button" data-path="/api/public/info">访问公开信息</button>
+    </section>
+    <section class="request-panel" aria-labelledby="request-title">
+      <div>
+        <h2 id="request-title">受保护接口</h2>
+        <p class="endpoint"><span>GET</span> /api/hello</p>
+        <p class="hint">页面地址经过开发代理，对应后端的 /hello。</p>
+      </div>
+      <button id="send-request" type="button" data-path="/api/hello">访问受保护接口</button>
+    </section>
+    <section class="request-panel" aria-labelledby="invalid-title">
+      <div>
+        <h2 id="invalid-title">业务参数错误对照</h2>
+        <p class="endpoint"><span>GET</span> /api/public/info?lang=unknown</p>
+        <p class="hint">公开接口只支持en或zh，观察非法参数如何返回400。</p>
+      </div>
+      <button id="send-invalid" type="button" data-path="/api/public/info?lang=unknown">查看参数错误对照</button>
+    </section>
+    <section class="request-panel" aria-labelledby="near-title">
+      <div><h2 id="near-title">近似路径</h2>
+        <p class="endpoint"><span>GET</span> /api/public/info-extra</p>
+        <p class="hint">名称相似不代表属于公开入口。</p></div>
+      <button type="button" data-path="/api/public/info-extra" data-method="GET">访问近似路径</button>
+    </section>
+    <section class="request-panel" aria-labelledby="unknown-title">
+      <div><h2 id="unknown-title">未知路径</h2>
+        <p class="endpoint"><span>GET</span> /api/missing</p>
+        <p class="hint">未列入允许清单，不因登录而自动开放。</p></div>
+      <button type="button" data-path="/api/missing" data-method="GET">访问未知路径</button>
+    </section>
+    <section class="request-panel" aria-labelledby="method-title">
+      <div><h2 id="method-title">同路径换方法</h2>
+        <p class="endpoint"><span>OPTIONS</span> /api/public/info</p>
+        <p class="hint">这是同源普通OPTIONS请求，用来与GET比较；不是跨域预检。</p></div>
+      <button type="button" data-path="/api/public/info" data-method="OPTIONS">用 OPTIONS 访问公开路径</button>
+    </section>
+    <section class="result-panel" aria-labelledby="result-title" aria-busy="false">
+      <div class="result-heading">
+        <h2 id="result-title">本次请求结果</h2>
+        <span id="status-code" class="status-code" data-state="idle">尚未请求</span>
+      </div>
+      <p id="result-summary" role="status" aria-live="polite">点击按钮后，这里会显示真实响应。</p>
+      <dl>
+        <div><dt>本次路径</dt><dd id="request-path">—</dd></div>
+        <div><dt>请求条件</dt><dd id="request-conditions">Accept: application/json · 不携带身份凭据</dd></div>
+        <div><dt>错误代码</dt><dd id="error-code">—</dd></div>
+        <div><dt>响应来源</dt><dd id="response-source">—</dd></div>
+      </dl>
+      <button id="retry-request" type="button" data-path="" hidden>重试本次请求</button>
+      <h3>响应内容</h3>
+      <pre id="response-body" tabindex="0" aria-label="响应内容">等待请求。</pre>
+    </section>
+    <aside aria-labelledby="observe-title">
+      <h2 id="observe-title">把页面结果与后端执行对应起来</h2>
+      <ol>
+        <li><strong>看状态：</strong>200表示成功；401表示本次未通过认证；400参数错误需要修改输入。</li>
+        <li><strong>看请求：</strong>在浏览器 Network 中找到 /api/public/info 或 /api/hello，检查状态与请求头。</li>
+        <li><strong>看日志：</strong>401是否记录API_AUTHENTICATION_REQUIRED；400是否记录PUBLIC_INFO_HANDLER_REACHED及MVC_ERROR_HANDLED？</li>
+      </ol>
+      <p>身份验证按钮仅为单次Basic对照；匿名按钮不携带凭据。上方表单提供会话登录；角色权限在后续课程加入。</p>
+    </aside>
+    <footer>第八课 · 当前用户接口与刷新后的身份恢复</footer>
+  </main>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
