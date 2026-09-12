@@ -12,34 +12,12 @@
     </parent>
 
     <groupId>io.learnjava.springinaction</groupId>
-    <artifactId>learn-java-spring-in-action</artifactId>
+    <artifactId>learn-spring-in-action-ning</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <name>learn-java-spring-in-action</name>
-    <description>Spring in Action 6th Edition learning workspace</description>
-
-    <modules>
-        <module>chapter01-spring-getting-started</module>
-        <module>chapter02-developing-web-applications</module>
-        <module>chapter03-working-with-data</module>
-        <module>chapter04-working-with-nonrelational-data</module>
-        <module>chapter05-securing-spring</module>
-        <module>chapter06-working-with-configuration-properties</module>
-        <module>chapter07-creating-rest-services</module>
-        <module>chapter08-securing-rest-services</module>
-        <module>chapter09-sending-messages-asynchronously</module>
-        <module>chapter10-integrating-spring</module>
-        <module>chapter11-introducing-reactor</module>
-        <module>chapter12-developing-reactive-apis</module>
-        <module>chapter13-persisting-data-reactively</module>
-        <module>chapter14-working-with-rsocket</module>
-        <module>chapter15-working-with-spring-boot-actuator</module>
-        <module>chapter16-administering-spring</module>
-        <module>chapter17-monitoring-spring-with-jmx</module>
-        <module>chapter18-deploying-spring</module>
-        <module>appendix-a-bootstrapping-spring-applications</module>
-    </modules>
+    <name>learn-spring-in-action-ning</name>
+    <description>Personal Spring in Action practice project</description>
 
     <properties>
         <java.version>11</java.version>
