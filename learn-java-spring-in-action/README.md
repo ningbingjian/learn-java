@@ -5,8 +5,11 @@
 ## 学习资料
 
 - 中文翻译仓库：<https://github.com/LeonLi0102/spring-in-action-v6-translate>
+- 原书官方配套源码：<https://github.com/habuma/spring-in-action-6-samples>
 - 原书：*Spring in Action, Sixth Edition*，Manning
 - 本项目只保存自己的学习代码、实验和笔记，不复制整本书内容。
+
+> 后续学习每一章时，优先参考中文翻译理解正文，同时对照原书官方配套源码验证项目结构、配置和实现方式；本项目不会直接照搬官方源码，而是按照学习过程逐步实现并保留自己的实验代码。
 
 ## 技术基线
 
